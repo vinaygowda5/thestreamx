@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { API } from "./config.js";
 
 /*
   Namma Cinema AI Customer Support
@@ -8,7 +9,6 @@ import { useState, useEffect, useRef } from "react";
 */
 
 // ── Only the backend URL is here — no secret keys in frontend ──
-const API = "https://streamx-ott-production.up.railway.app"; // ← paste your Railway URL
 
 const QUICK = [
   "Video not playing 🎬",

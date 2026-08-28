@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API } from "./config.js";
 
 /*
   StreamX — Real Razorpay Payment
@@ -12,7 +13,6 @@ import { useState } from "react";
   - DO NOT put keys in this frontend file
 */
 
-const API = "https://streamx-ott-production.up.railway.app";
 
 const PLANS = [
   {

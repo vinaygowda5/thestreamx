@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { API } from "./config.js";
 import { supabase, db } from "./supabase.js";
 import Hls from "hls.js";
 import FaceAuth from "./FaceAuth.jsx";
@@ -311,7 +312,6 @@ function StreamPreview({url,isLive=false}){
 // The R2 secret key never touches this file — the backend signs a
 // short-lived (10 min) upload URL, and the browser PUTs the file straight
 // to R2. This removes Supabase Storage's ~50MB cap entirely.
-const API = "https://streamx-ott-production.up.railway.app";
 
 async function uploadToR2(file, onProgress) {
   const token = localStorage.getItem("streamx_token");

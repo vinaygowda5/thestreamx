@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { API } from "./config.js";
 import { supabase, db } from "./supabase.js";
 
 /*
@@ -10,7 +11,6 @@ import { supabase, db } from "./supabase.js";
 const ADMIN_EMAILS = ["admin@cthestreamx.in","vinaygowda12096909@gmail.com","admin@streamx.in"];
 const TEST_EMAIL   = "test@streamx.dev";
 const TEST_CODE    = "000000";
-const API = "https://streamx-ott-production.up.railway.app";
 
 // Saves the user locally AND fetches a backend JWT so Payment.jsx (and any
 // other backend-only route) actually has a valid token to send. Previously

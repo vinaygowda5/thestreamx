@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
+import { API } from "./config.js";
 import CustomerSupport from "./CustomerSupport.jsx";
 import { supabase, db } from "./supabase.js";
 import { promptInstall, canInstall, subscribeToPush } from "./pwa.js";
-const API = "https://streamx-ott-production.up.railway.app";
 
 const RED="#e50914",BG="#07070c",S1="#0f0f16",BD="#1a1a26",MT="#555";
 

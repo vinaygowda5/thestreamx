@@ -3,8 +3,8 @@
   Add this as: frontend/src/monitoring.js
   Tracks: errors, page views, user actions — all sent to your backend
 */
+import { API } from "./config.js";
 
-const API = "https://streamx-ott-production.up.railway.app";
 
 // ── Track page view ──
 export function trackPageView(page, user) {
