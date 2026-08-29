@@ -282,9 +282,9 @@ export default function Home({ onNavigate, user, onUpgrade }) {
 
       {/* ── NAVBAR ── */}
       <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:200,background:scrolled?"rgba(10,10,15,.97)":"transparent",backdropFilter:scrolled?"blur(16px)":"none",borderBottom:scrolled?"1px solid rgba(255,255,255,.05)":"none",transition:"all .3s"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"clamp(8px,2vw,16px)",padding:"0 clamp(14px,4vw,24px)",height:"clamp(50px,8vw,56px)"}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(22px,4vw,27px)",letterSpacing:2,cursor:"pointer",lineHeight:1,flexShrink:0}} onClick={()=>setCat("For You")}>
-            <span style={{color:"#e50914"}}>STREAMX</span>
+        <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 20px 0"}}>
+          <div style={{fontWeight:900,fontSize:22,letterSpacing:1,cursor:"pointer"}} onClick={()=>setCat("FOR YOU")}>
+            <span style={{color:"#e50914"}}>STREAM</span><span style={{color:"#aaa"}}>X</span>
           </div>
           <div style={{flex:1}}/>
           <button onClick={()=>setShowSearch(true)} style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.08)",borderRadius:8,padding:"7px clamp(10px,2vw,14px)",color:"#aaa",fontSize:13,cursor:"pointer"}}>
