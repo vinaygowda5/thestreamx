@@ -67,13 +67,13 @@ const PLANS = [
 ];
 
 export default function Payment({ user, onClose, onSuccess }) {
-  const [loading, setLoading] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState(null); // holds the plan.id currently processing, or null
   const [error,   setError]   = useState("");
   const [success, setSuccess] = useState(null);
 
   async function handleSubscribe(plan) {
     if (!user?.id) { setError("Please login first"); return; }
-    setError(""); setLoading(true);
+    setError(""); setLoadingPlan(plan.id);
 
     const token = localStorage.getItem("streamx_token");
 
@@ -88,7 +88,7 @@ export default function Payment({ user, onClose, onSuccess }) {
         body: JSON.stringify({ plan_id: plan.id }),
       });
       const orderData = await orderRes.json();
-      if (!orderData.success) { setError(orderData.msg || "Failed to create order"); setLoading(false); return; }
+      if (!orderData.success) { setError(orderData.msg || "Failed to create order"); setLoadingPlan(null); return; }
 
       const { order_id, amount, key_id } = orderData.data;
 
@@ -123,19 +123,19 @@ export default function Payment({ user, onClose, onSuccess }) {
               }),
             });
             const verifyData = await verifyRes.json();
-            if (!verifyData.success) { setError("Payment verification failed. Contact support."); setLoading(false); return; }
+            if (!verifyData.success) { setError("Payment verification failed. Contact support."); setLoadingPlan(null); return; }
 
             // Success!
             setSuccess(plan);
-            setLoading(false);
+            setLoadingPlan(null);
             onSuccess?.(plan.id);
           } catch(e) {
             setError("Verification failed. Contact support@streamx.in");
-            setLoading(false);
+            setLoadingPlan(null);
           }
         },
         modal: {
-          ondismiss: () => { setLoading(false); }
+          ondismiss: () => { setLoadingPlan(null); }
         }
       };
 
@@ -155,7 +155,7 @@ export default function Payment({ user, onClose, onSuccess }) {
 
     } catch(e) {
       setError("Something went wrong. Please try again.");
-      setLoading(false);
+      setLoadingPlan(null);
     }
   }
 
@@ -237,10 +237,10 @@ export default function Payment({ user, onClose, onSuccess }) {
               ) : (
                 <button
                   onClick={() => handleSubscribe(plan)}
-                  disabled={loading}
-                  style={{width:"100%",background:loading?"#1a1a2e":`linear-gradient(135deg,${plan.color},${plan.color}cc)`,color:"#fff",border:"none",borderRadius:10,padding:"12px",fontWeight:800,fontSize:14,cursor:loading?"not-allowed":"pointer",fontFamily:"Inter,sans-serif",transition:"all .2s",boxShadow:loading?"none":`0 4px 16px ${plan.color}44`}}
+                  disabled={loadingPlan === plan.id}
+                  style={{width:"100%",background:loadingPlan===plan.id?"#1a1a2e":`linear-gradient(135deg,${plan.color},${plan.color}cc)`,color:"#fff",border:"none",borderRadius:10,padding:"12px",fontWeight:800,fontSize:14,cursor:loadingPlan===plan.id?"not-allowed":"pointer",fontFamily:"Inter,sans-serif",transition:"all .2s",boxShadow:loadingPlan===plan.id?"none":`0 4px 16px ${plan.color}44`}}
                 >
-                  {loading ? "Processing..." : `Subscribe ₹${plan.price}/${plan.period === "year" ? "yr" : "mo"}`}
+                  {loadingPlan===plan.id ? "Processing..." : `Subscribe ₹${plan.price}/${plan.period === "year" ? "yr" : "mo"}`}
                 </button>
               )}
             </div>
