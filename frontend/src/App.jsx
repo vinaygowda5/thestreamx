@@ -4,6 +4,7 @@ import Home from "./Home.jsx";
 import Profile from "./Profile.jsx";
 import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
+import Payment from "./Payment.jsx";
 
 const ADMIN_PHONES = ["+918660570052", "+919000000000", "+919000000001"];
 const ADMIN_EMAILS = ["admin@streamx.in", "vinaygowdaw@gmail.com"];
@@ -66,30 +67,18 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#07070c" }}>
-      {/* Upgrade Modal */}
+      {/* Upgrade Modal — real payment flow (Razorpay + backend verification) */}
       {upgrade && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "Inter,sans-serif" }}>
-          <div style={{ background: "#111120", border: "1px solid #1a1a26", borderRadius: 20, padding: 32, width: "100%", maxWidth: 380, textAlign: "center" }}>
-            <div style={{ fontSize: 52, marginBottom: 14 }}>👑</div>
-            <div style={{ fontWeight: 900, fontSize: 24, marginBottom: 6 }}>StreamX Premium</div>
-            <div style={{ fontSize: 13, color: "#666", marginBottom: 24, lineHeight: 1.7 }}>4K · HDR · No Ads · 4 Screens · Downloads · All Languages</div>
-            {[
-              { name: "Mobile", price: "₹99", sub: "/month · 1 screen · HD" },
-              { name: "Basic",  price: "₹149", sub: "/month · 2 screens · FHD" },
-              { name: "Premium",price: "₹249", sub: "/month · 4 screens · 4K HDR", best: true },
-              { name: "Annual", price: "₹2499", sub: "/year · Save 83% · All features", best: false },
-            ].map(p => (
-              <div key={p.name} onClick={() => setUpgrade(false)} style={{ background: p.best ? "rgba(229,9,20,.12)" : "rgba(255,255,255,.04)", border: `1px solid ${p.best ? "rgba(229,9,20,.4)" : "#1a1a26"}`, borderRadius: 12, padding: "14px 18px", marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all .15s" }}>
-                <div style={{ textAlign: "left" }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{p.name}{p.best && <span style={{ background: "#e50914", color: "#fff", fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 3, marginLeft: 8 }}>BEST</span>}</div>
-                  <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{p.sub}</div>
-                </div>
-                <div style={{ fontWeight: 900, fontSize: 18, color: p.best ? "#e50914" : "#fff" }}>{p.price}</div>
-              </div>
-            ))}
-            <button onClick={() => setUpgrade(false)} style={{ width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid #1a1a26", color: "#aaa", borderRadius: 10, padding: "12px", fontSize: 13, cursor: "pointer", fontFamily: "Inter,sans-serif", marginTop: 4 }}>Maybe Later</button>
-          </div>
-        </div>
+        <Payment
+          user={user}
+          onClose={() => setUpgrade(false)}
+          onSuccess={(planId) => {
+            const updated = { ...user, plan: planId };
+            setUser(updated);
+            localStorage.setItem("streamx_user", JSON.stringify(updated));
+            setUpgrade(false);
+          }}
+        />
       )}
 
       {/* Pages */}
