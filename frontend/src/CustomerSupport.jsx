@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { API } from "./config.js";
 
 /*
-  Namma Cinema AI Customer Support
+  thestreamx AI Customer Support
   - OpenAI key is stored ONLY in Railway backend env variables
   - Frontend just calls /api/support/chat (no key exposed)
   - Secure: users never see your OpenAI key
@@ -22,7 +22,7 @@ const QUICK = [
 export default function CustomerSupport({ user, onClose }) {
   const [messages, setMessages] = useState([{
     role:"assistant",
-    content:"Hi! 👋 I'm Namma Cinema Support AI.\n\nHow can I help you today?\n• Video not playing?\n• Login issues?\n• Subscription & plans?\n• Any other problem?"
+    content:"Hi! 👋 I'm thestreamx Support AI.\n\nHow can I help you today?\n• Video not playing?\n• Login issues?\n• Subscription & plans?\n• Any other problem?"
   }]);
   const [input,   setInput]   = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,7 +73,7 @@ export default function CustomerSupport({ user, onClose }) {
         <button onClick={onClose} style={{background:"none",border:"none",color:"#aaa",fontSize:22,cursor:"pointer",padding:4}}>←</button>
         <div style={{width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#e50914,#c00)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🤖</div>
         <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:15,color:"#fff"}}>Namma Cinema Support</div>
+          <div style={{fontWeight:700,fontSize:15,color:"#fff"}}>thestreamx Support</div>
           <div style={{fontSize:11,color:"#00c853",display:"flex",alignItems:"center",gap:5}}>
             <div style={{width:6,height:6,borderRadius:"50%",background:"#00c853"}}/>
             AI Assistant • Always online

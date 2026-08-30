@@ -1,6 +1,6 @@
 /*
   ═══════════════════════════════════════════════════════════
-  NAMMA CINEMA — 3-LAYER FIREWALL SYSTEM
+  THESTREAMX — 3-LAYER FIREWALL SYSTEM
   ═══════════════════════════════════════════════════════════
 
   LAYER 1: RATE LIMITER
@@ -238,7 +238,7 @@ function securityHeaders(req, res, next) {
   res.setHeader("X-XSS-Protection", "1; mode=block");
   // Remove server info
   res.removeHeader("X-Powered-By");
-  res.setHeader("Server", "NammaCinema");
+  res.setHeader("Server", "TheStreamx");
   // HTTPS only (enable when you have SSL)
   res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   // Content Security Policy

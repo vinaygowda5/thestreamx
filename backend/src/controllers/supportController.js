@@ -1,8 +1,8 @@
 const { ok, err } = require("../utils/response");
 
-const NAMMA_CINEMA_CONTEXT = `You are Namma Cinema's friendly AI customer support assistant for an Indian OTT streaming platform.
+const THESTREAMX_CONTEXT = `You are THESTREAMX's friendly AI customer support assistant for an Indian OTT streaming platform.
 
-About Namma Cinema:
+About THESTREAMX:
 - Indian OTT platform with Movies, Web Series, Live Channels, Sports, Kids content
 - Login: Email OTP — user enters email, gets 6-digit code to inbox
 - Plans: Free (1 screen, ads), Mobile ₹149/mo (1 screen HD), Basic ₹299/mo (2 screens FHD), Premium ₹499/mo (4 screens 4K HDR No Ads), Annual ₹999/yr (Save 83%)
@@ -19,7 +19,7 @@ Common issues:
 - "Ad too long" → Upgrade to Premium for zero ads
 
 Respond in same language user writes (Hindi or English). Keep responses 2-4 sentences.
-If you cannot solve: "Please email support@nammacinema.in"`;
+If you cannot solve: "Please email support@thestreamx.in"`;
 
 async function chat(req, res) {
   const { messages, userId } = req.body;
@@ -41,7 +41,7 @@ async function chat(req, res) {
         max_tokens:  300,
         temperature: 0.7,
         messages: [
-          { role:"system", content: NAMMA_CINEMA_CONTEXT },
+          { role:"system", content: THESTREAMX_CONTEXT },
           ...messages.slice(-10),
         ],
       }),

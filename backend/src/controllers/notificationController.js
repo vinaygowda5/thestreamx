@@ -5,7 +5,7 @@ const webpush = require("web-push");
 // Set VAPID keys (generate once, store in Railway env)
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
-    "mailto:" + (process.env.ADMIN_EMAILS || "admin@nammacinema.in").split(",")[0],
+    "mailto:" + (process.env.ADMIN_EMAILS || "admin@thestreamx.in").split(",")[0],
     process.env.VAPID_PUBLIC_KEY,
     process.env.VAPID_PRIVATE_KEY
   );
