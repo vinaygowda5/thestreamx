@@ -6,7 +6,7 @@ import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
 
 const ADMIN_PHONES = ["+918660570052", "+919000000000", "+919000000001"];
-const ADMIN_EMAILS = ["admin@streamx.in", "vinaygowda12096909@email.com"];
+const ADMIN_EMAILS = ["admin@streamx.in", "vinaygowdaw@email.com"];
 
 export default function App() {
   const [user,    setUser]    = useState(null);

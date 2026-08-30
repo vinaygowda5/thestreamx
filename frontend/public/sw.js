@@ -6,7 +6,7 @@
   - Logs errors for monitoring
 */
 
-const CACHE_NAME = "streamx-v1";
+const CACHE_NAME = "streamx-v2"; // bumped — forces existing installs to get a clean cache once
 const APP_SHELL  = [
   "/",
   "/index.html",
@@ -48,10 +48,18 @@ self.addEventListener("fetch", event => {
     return; // Let network handle it
   }
 
-  // For navigation requests — serve index.html from cache
+  // For navigation requests — try network first (get latest), fall back to
+  // cache only when offline. Cache-first here was the actual bug: it meant
+  // new deploys never appeared until someone manually cleared site data.
   if (event.request.mode === "navigate") {
     event.respondWith(
-      caches.match("/index.html").then(r => r || fetch(event.request))
+      fetch(event.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put("/index.html", clone));
+          return response;
+        })
+        .catch(() => caches.match("/index.html"))
     );
     return;
   }
