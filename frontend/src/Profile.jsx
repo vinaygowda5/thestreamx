@@ -107,21 +107,21 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
     if(deleteConfirm.toLowerCase()!=="delete")return;
     setDeleting(true);
     try{
-      if(user?.id){
-        await supabase.from("watchlist").delete().eq("user_id",user.id).catch(()=>{});
-        await supabase.from("watch_history").delete().eq("user_id",user.id).catch(()=>{});
-        await supabase.from("notifications").delete().eq("user_id",user.id).catch(()=>{});
-        await supabase.from("profiles").delete().eq("user_id",user.id).catch(()=>{});
-        await supabase.from("subscriptions").delete().eq("user_id",user.id).catch(()=>{});
-        await supabase.from("users").delete().eq("id",user.id).catch(()=>{});
-        await supabase.auth.signOut().catch(()=>{});
-      }
+      const token = localStorage.getItem("streamx_token");
+      const res = await fetch(`${API}/api/users/me`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if(!json.success) throw new Error(json.msg || "Delete failed");
+      await supabase.auth.signOut().catch(()=>{});
       localStorage.removeItem("streamx_user");
+      localStorage.removeItem("streamx_token");
       localStorage.removeItem("streamx_prefs_"+user?.id);
       localStorage.removeItem("streamx_lang_"+user?.id);
       showToast("Account deleted. Goodbye 👋");
       setTimeout(()=>onLogout(),2000);
-    }catch(e){showToast("Delete failed. Try again.","err");}
+    }catch(e){showToast("Delete failed: "+e.message,"err");}
     setDeleting(false);
   }
 
@@ -175,6 +175,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
+        .profile-tabs-row::-webkit-scrollbar{display:none;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         .inp{background:#0a0a14;border:1.5px solid #1a1a2c;border-radius:8px;color:#fff;padding:10px 14px;font-size:14px;outline:none;font-family:Inter,sans-serif;width:100%;transition:border-color .2s;}
@@ -225,7 +226,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
             </div>
           </div>
         </div>
-        <div style={{display:"flex",overflowX:"auto",padding:"0 20px",borderTop:`1px solid ${BD}`,marginTop:16}}>
+        <div className="profile-tabs-row" style={{display:"flex",overflowX:"auto",padding:"0 20px",borderTop:`1px solid ${BD}`,marginTop:16,scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",color:tab===t.id?"#fff":MT,fontWeight:tab===t.id?700:500,padding:"10px 14px",cursor:"pointer",fontSize:13,whiteSpace:"nowrap",borderBottom:`2px solid ${tab===t.id?RED:"transparent"}`,fontFamily:"Inter,sans-serif",transition:"all .15s"}}>
               {t.icon} {t.label}

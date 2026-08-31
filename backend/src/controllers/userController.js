@@ -64,6 +64,10 @@ async function deleteAccount(req, res) {
   await sb.from("subscriptions").delete().eq("user_id", id);
   await sb.from("user_sessions").delete().eq("user_id", id);
   await sb.from("users").delete().eq("id", id);
+  // Also remove the actual login identity — otherwise OTP login would
+  // still work afterward since the auth.users record isn't touched by
+  // the deletes above (those only clear app-side tables).
+  try { await sb.auth.admin.deleteUser(id); } catch (e) { /* non-fatal — app data is already gone either way */ }
   return ok(res, null, "Account deleted");
 }
 
