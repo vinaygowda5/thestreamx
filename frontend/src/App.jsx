@@ -5,6 +5,7 @@ import Profile from "./Profile.jsx";
 import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
 import Payment from "./Payment.jsx";
+import { t } from "./i18n.js";
 
 const ADMIN_PHONES = ["+918660570052", "+919000000000", "+919000000001"];
 const ADMIN_EMAILS = ["admin@streamx.in", "vinaygowdaw@gmail.com"];
@@ -90,12 +91,15 @@ export default function App() {
       {/* Bottom Nav — Mobile */}
       {page !== "admin" && (
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "rgba(7,7,12,.97)", backdropFilter: "blur(16px)", borderTop: "1px solid #1a1a26", display: "flex", padding: "8px 0 calc(8px + env(safe-area-inset-bottom))" }}>
-          {[
-            { id: "home",    icon: <img src="./icons/home.svg" width="24" height="24" />, label: "Home"    },
-            { id: "search",  icon: <img src="./icons/search.svg" width="24" height="24" />, label: "Search"  },
-            { id: "profile", icon: <img src="./icons/profile.svg" width="24" height="24" />, label: "Profile" },
-            ...(user?.role === "admin" ? [{ id: "admin", icon: <img src="./icons/admin.svg" width="24" height="24" />, label: "Admin" }] : []),
-          ].map(tab => (
+          {(() => {
+            const lang = (user?.id && localStorage.getItem("streamx_lang_" + user.id)) || user?.language || "en";
+            return [
+              { id: "home",    icon: <img src="./icons/home.svg" width="24" height="24" />, label: t("nav_home", lang)    },
+              { id: "search",  icon: <img src="./icons/search.svg" width="24" height="24" />, label: t("nav_search", lang)  },
+              { id: "profile", icon: <img src="./icons/profile.svg" width="24" height="24" />, label: t("nav_profile", lang) },
+              ...(user?.role === "admin" ? [{ id: "admin", icon: <img src="./icons/admin.svg" width="24" height="24" />, label: t("nav_admin", lang) }] : []),
+            ];
+          })().map(tab => (
             <button key={tab.id} onClick={() => handleNavigate(tab.id)} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer", padding: "4px 0" }}>
               <span style={{ fontSize: 20 }}>{tab.icon}</span>
               <span style={{ fontSize: 10, color: page === tab.id ? "#e50914" : "#555", fontWeight: page === tab.id ? 700 : 400, fontFamily: "Inter,sans-serif" }}>{tab.label}</span>

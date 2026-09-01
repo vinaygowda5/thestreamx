@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase, db } from "./supabase.js";
 import VideoPlayer from "./VideoPlayer.jsx";
 import Search from "./Search.jsx";
+import { t } from "./i18n.js";
 
 const GS = `
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -12,7 +13,6 @@ body{background:#0a0a0f;color:#fff;font-family:'Manrope',sans-serif;overflow-x:h
 ::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
 .rs{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;scroll-behavior:smooth;}
 .rs::-webkit-scrollbar{height:0;}
-.cattabs::-webkit-scrollbar{display:none;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
@@ -24,6 +24,7 @@ body{background:#0a0a0f;color:#fff;font-family:'Manrope',sans-serif;overflow-x:h
 `;
 
 const CATS = ["For You","Live","Movies","Series","Sports","Kids","Premium","News"];
+const CAT_KEY = {"For You":"cat_for_you","Live":"cat_live","Movies":"cat_movies","Series":"cat_series","Sports":"cat_sports","Kids":"cat_kids","Premium":"cat_premium","News":"cat_news"};
 
 const GENRE_COLOR = {
   Action:"#e50914",Drama:"#f59e0b","Sci-Fi":"#1d9bf0",Thriller:"#a855f7",
@@ -126,7 +127,7 @@ function Row({ label, items, onPlay }) {
 }
 
 /* ── Hero Banner ── */
-function Hero({ items, onPlay }) {
+function Hero({ items, onPlay, lang }) {
   const [idx, setIdx] = useState(0);
   const [key, setKey] = useState(0);
   useEffect(()=>{
@@ -154,8 +155,8 @@ function Hero({ items, onPlay }) {
           {h.language && <span style={{background:"rgba(255,255,255,.08)",color:"rgba(255,255,255,.5)",fontSize:10,padding:"2px 8px",borderRadius:4}}>{h.language}</span>}
         </div>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={()=>onPlay(h)} style={{background:h.is_live?"#e50914":"#fff",color:h.is_live?"#fff":"#111",border:"none",borderRadius:9,padding:"clamp(10px,2vw,13px) clamp(18px,3vw,26px)",fontWeight:800,fontSize:"clamp(13px,2vw,15px)",cursor:"pointer"}}>▶ {h.is_live?"Watch Live":"Play Now"}</button>
-          <button style={{background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.2)",borderRadius:9,padding:"clamp(10px,2vw,13px) clamp(14px,2.5vw,20px)",fontSize:"clamp(13px,2vw,14px)",cursor:"pointer"}}>+ My List</button>
+          <button onClick={()=>onPlay(h)} style={{background:h.is_live?"#e50914":"#fff",color:h.is_live?"#fff":"#111",border:"none",borderRadius:9,padding:"clamp(10px,2vw,13px) clamp(18px,3vw,26px)",fontWeight:800,fontSize:"clamp(13px,2vw,15px)",cursor:"pointer"}}>▶ {h.is_live?t("watch_live",lang):t("play_now",lang)}</button>
+          <button style={{background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.2)",borderRadius:9,padding:"clamp(10px,2vw,13px) clamp(14px,2.5vw,20px)",fontSize:"clamp(13px,2vw,14px)",cursor:"pointer"}}>+ {t("my_list",lang)}</button>
         </div>
       </div>
       <div style={{position:"absolute",bottom:"clamp(12px,2.5vh,18px)",left:"50%",transform:"translateX(-50%)",display:"flex",gap:5}}>
@@ -186,6 +187,7 @@ export default function Home({ onNavigate, user, onUpgrade }) {
   const [playItem,   setPlayItem]   = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [scrolled,   setScrolled]   = useState(false);
+  const lang = (user?.id && localStorage.getItem("streamx_lang_" + user.id)) || user?.language || "en";
 
   useEffect(()=>{
     loadContent();
@@ -233,22 +235,22 @@ export default function Home({ onNavigate, user, onUpgrade }) {
 
   function rows(){
     switch(cat){
-      case "Live":    return [["🔴 Live Channels", g.live]];
-      case "Movies":  return [["🎬 Movies",         g.movies]];
-      case "Series":  return [["📺 Series",          g.series]];
-      case "Sports":  return [["🏆 Sports",          g.sports]];
-      case "Kids":    return [["🧸 Kids",             g.kids]];
-      case "Premium": return [["👑 Premium",          g.premium]];
-      case "News":    return [["📰 News",             g.news]];
+      case "Live":    return [[`🔴 ${t("live_now",lang)}`, g.live]];
+      case "Movies":  return [[`🎬 ${t("movies",lang)}`,   g.movies]];
+      case "Series":  return [[`📺 ${t("series",lang)}`,   g.series]];
+      case "Sports":  return [[`🏆 ${t("sports",lang)}`,   g.sports]];
+      case "Kids":    return [[`🧸 ${t("kids",lang)}`,     g.kids]];
+      case "Premium": return [[`👑 ${t("premium",lang)}`,  g.premium]];
+      case "News":    return [[`📰 ${t("news",lang)}`,     g.news]];
       default: return [
-        ["🔴 Live Now",    g.live],
-        ["🔥 Trending",    g.trending.slice(0,12)],
-        ["🎬 Movies",      g.movies],
-        ["📺 Series",      g.series],
-        ["🏆 Sports",      g.sports],
-        ["🧸 Kids",        g.kids],
-        ["👑 Originals",   g.premium],
-        ["📰 News",        g.news],
+        [`🔴 ${t("live_now",lang)}`,     g.live],
+        [`🔥 ${t("trending_now",lang)}`, g.trending.slice(0,12)],
+        [`🎬 ${t("movies",lang)}`,       g.movies],
+        [`📺 ${t("series",lang)}`,       g.series],
+        [`🏆 ${t("sports",lang)}`,       g.sports],
+        [`🧸 ${t("kids",lang)}`,         g.kids],
+        [`👑 ${t("originals",lang)}`,    g.premium],
+        [`📰 ${t("news",lang)}`,         g.news],
       ];
     }
   }
@@ -289,23 +291,23 @@ export default function Home({ onNavigate, user, onUpgrade }) {
           </div>
           <div style={{flex:1}}/>
           <button onClick={()=>setShowSearch(true)} style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.08)",borderRadius:8,padding:"7px clamp(10px,2vw,14px)",color:"#aaa",fontSize:13,cursor:"pointer"}}>
-            🔍 Search
+            🔍 {t("nav_search",lang)}
           </button>
           <button onClick={onUpgrade} style={{background:"rgba(229,9,20,.12)",border:"1px solid rgba(229,9,20,.3)",color:"#89050b",borderRadius:8,padding:"7px clamp(9px,1.5vw,13px)",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-            👑 Premium
+            👑 {t("premium",lang)}
           </button>
           <div onClick={()=>onNavigate("profile")} style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,#e50914,#ff4444)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,cursor:"pointer",fontWeight:700,flexShrink:0}}>
             {user?.name?.[0]?.toUpperCase()||"👤"}
           </div>
         </div>
         {/* Category tabs */}
-        <div className="cattabs" style={{display:"flex",overflowX:"auto",padding:"0 clamp(14px,4vw,24px)",borderBottom:"1px solid rgba(255,255,255,.06)",scrollbarWidth:"none",msOverflowStyle:"none"}}>
-          {CATS.map(c=><button key={c} className={`pt${cat===c?" on":""}`} onClick={()=>setCat(c)}>{c}</button>)}
+        <div style={{display:"flex",overflowX:"auto",padding:"0 clamp(14px,4vw,24px)",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+          {CATS.map(c=><button key={c} className={`pt${cat===c?" on":""}`} onClick={()=>setCat(c)}>{t(CAT_KEY[c], lang)}</button>)}
         </div>
       </nav>
 
       {/* ── HERO (only if content exists) ── */}
-      {cat==="For You" && !loading && heroItems.length>0 && <Hero items={heroItems} onPlay={setPlayItem}/>}
+      {cat==="For You" && !loading && heroItems.length>0 && <Hero items={heroItems} onPlay={setPlayItem} lang={lang}/>}
       {(cat!=="For You" || heroItems.length===0) && <div style={{height:"clamp(96px,14vw,108px)"}}/>}
 
       {/* ── CONTENT ── */}
@@ -330,10 +332,10 @@ export default function Home({ onNavigate, user, onUpgrade }) {
           {!hasAny && cat==="For You" && (
             <div style={{textAlign:"center",padding:"60px 20px",animation:"fadeIn .4s ease"}}>
               <div style={{fontSize:72,marginBottom:20,opacity:.3}}>🎬</div>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:8,color:"#2a2a36"}}>No Content Yet</div>
-              <div style={{fontSize:14,color:"#222",marginBottom:24}}>Go to Admin Panel and add your first movie, series or live channel</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:8,color:"#2a2a36"}}>{t("no_content_title",lang)}</div>
+              <div style={{fontSize:14,color:"#222",marginBottom:24}}>{t("no_content_sub",lang)}</div>
               <button onClick={()=>onNavigate("admin")} style={{background:"#e50914",color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",fontWeight:700,fontSize:14,cursor:"pointer"}}>
-                Open Admin Panel →
+                {t("open_admin",lang)} →
               </button>
             </div>
           )}
@@ -345,18 +347,18 @@ export default function Home({ onNavigate, user, onUpgrade }) {
 
           {/* Category empty state */}
           {hasAny && cat!=="For You" && rows().every(([,items])=>!items?.length) && (
-            <Empty icon={catEmptyMsg[cat]?.[0]||"📂"} msg={catEmptyMsg[cat]?.[1]||"No content yet"}/>
+            <Empty icon={catEmptyMsg[cat]?.[0]||"📂"} msg={catEmptyMsg[cat]?.[1]||t("no_history",lang)}/>
           )}
 
           {/* Premium banner — only if content exists */}
           {hasAny && cat==="For You" && (
             <div style={{margin:`8px clamp(14px,4vw,24px) 40px`,borderRadius:14,background:"linear-gradient(120deg,#e50914,#ff6b35)",padding:"clamp(18px,4vw,26px) clamp(18px,5vw,32px)",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:14}}>
               <div>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(20px,4vw,26px)",letterSpacing:1,marginBottom:4}}>Upgrade to StreamX Premium</div>
-                <div style={{fontSize:"clamp(11px,2vw,13px)",color:"rgba(255,255,255,.8)"}}>4K · HDR · No Ads · 4 Screens · Downloads</div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(20px,4vw,26px)",letterSpacing:1,marginBottom:4}}>{t("upgrade_title",lang)}</div>
+                <div style={{fontSize:"clamp(11px,2vw,13px)",color:"rgba(255,255,255,.8)"}}>{t("upgrade_sub",lang)}</div>
               </div>
               <button onClick={onUpgrade} style={{background:"#fff",color:"#e50914",border:"none",borderRadius:9,padding:"clamp(10px,2vw,12px) clamp(16px,3vw,22px)",fontWeight:800,fontSize:"clamp(12px,2vw,14px)",cursor:"pointer",whiteSpace:"nowrap"}}>
-                Subscribe ₹249/mo
+                {t("subscribe",lang)} ₹249/mo
               </button>
             </div>
           )}

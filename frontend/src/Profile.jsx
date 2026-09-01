@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { API } from "./config.js";
+import { t } from "./i18n.js";
 import CustomerSupport from "./CustomerSupport.jsx";
 import { supabase, db } from "./supabase.js";
 import { promptInstall, canInstall, subscribeToPush } from "./pwa.js";
@@ -7,12 +8,9 @@ import { promptInstall, canInstall, subscribeToPush } from "./pwa.js";
 const RED="#e50914",BG="#07070c",S1="#0f0f16",BD="#1a1a26",MT="#555";
 
 const LANGUAGES=[
-  {code:"hi",label:"Hindi",flag:"🇮🇳"},{code:"en",label:"English",flag:"🇬🇧"},
+  {code:"en",label:"English",flag:"🇬🇧"},{code:"hi",label:"Hindi",flag:"🇮🇳"},
   {code:"kn",label:"Kannada",flag:"🇮🇳"},{code:"ta",label:"Tamil",flag:"🇮🇳"},
-  {code:"te",label:"Telugu",flag:"🇮🇳"},{code:"bn",label:"Bengali",flag:"🇮🇳"},
-  {code:"ml",label:"Malayalam",flag:"🇮🇳"},{code:"pa",label:"Punjabi",flag:"🇮🇳"},
-  {code:"mr",label:"Marathi",flag:"🇮🇳"},{code:"gu",label:"Gujarati",flag:"🇮🇳"},
-  {code:"bh",label:"Bhojpuri",flag:"🇮🇳"},{code:"or",label:"Odia",flag:"🇮🇳"},
+  {code:"te",label:"Telugu",flag:"🇮🇳"},{code:"ml",label:"Malayalam",flag:"🇮🇳"},
 ];
 
 export default function Profile({onNavigate,user,onLogout,onUpgrade}){
@@ -136,14 +134,14 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
   }[plan]||{name:"Free",color:"#555",price:"₹0",icon:"🆓"};
 
   const unread=notifs.filter(n=>!n.is_read).length;
-  const selLang=LANGUAGES.find(l=>l.code===appLang)||LANGUAGES[1];
+  const selLang=LANGUAGES.find(l=>l.code===appLang)||LANGUAGES[0];
 
   const TABS=[
-    {id:"profile",label:"Profile",icon:"👤"},
-    {id:"watchlist",label:"Watchlist",icon:"♥"},
-    {id:"history",label:"History",icon:"🕐"},
-    {id:"notifications",label:`Alerts${unread>0?` (${unread})`:""}`,icon:"🔔"},
-    {id:"settings",label:"Settings",icon:"⚙️"},
+    {id:"profile",label:t("profile_tab",appLang),icon:"👤"},
+    {id:"watchlist",label:t("watchlist_tab",appLang),icon:"♥"},
+    {id:"history",label:t("history_tab",appLang),icon:"🕐"},
+    {id:"notifications",label:`${t("alerts_tab",appLang)}${unread>0?` (${unread})`:""}`,icon:"🔔"},
+    {id:"settings",label:t("settings_tab",appLang),icon:"⚙️"},
   ];
 
   const Card=({children,style={}})=>(
