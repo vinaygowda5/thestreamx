@@ -12,6 +12,7 @@ body{background:#0a0a0f;color:#fff;font-family:'Manrope',sans-serif;overflow-x:h
 ::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
 .rs{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;scroll-behavior:smooth;}
 .rs::-webkit-scrollbar{height:0;}
+.cattabs::-webkit-scrollbar{display:none;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
@@ -298,7 +299,7 @@ export default function Home({ onNavigate, user, onUpgrade }) {
           </div>
         </div>
         {/* Category tabs */}
-        <div style={{display:"flex",overflowX:"auto",padding:"0 clamp(14px,4vw,24px)",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+        <div className="cattabs" style={{display:"flex",overflowX:"auto",padding:"0 clamp(14px,4vw,24px)",borderBottom:"1px solid rgba(255,255,255,.06)",scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {CATS.map(c=><button key={c} className={`pt${cat===c?" on":""}`} onClick={()=>setCat(c)}>{c}</button>)}
         </div>
       </nav>
