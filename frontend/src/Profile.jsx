@@ -199,7 +199,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
             <span style={{color:RED}}>STREAM</span><span style={{color:"#aaa"}}>X</span>
           </div>
           <div style={{flex:1}}/>
-          <button onClick={()=>onNavigate("home")} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${BD}`,color:"#aaa",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer"}}>← Home</button>
+          <button onClick={()=>onNavigate("home")} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${BD}`,color:"#aaa",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer"}}>← {t("home",appLang)}</button>
         </div>
         <div style={{padding:"20px 20px 0",display:"flex",gap:18,alignItems:"flex-end",flexWrap:"wrap"}}>
           <div style={{width:78,height:78,borderRadius:"50%",background:`linear-gradient(135deg,${planInfo.color}44,${planInfo.color}18)`,border:`3px solid ${planInfo.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,fontWeight:700,flexShrink:0}}>
@@ -242,12 +242,12 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <div>
                   <div style={{fontSize:20,fontWeight:900,color:planInfo.color}}>{planInfo.icon} {planInfo.name} Plan</div>
-                  <div style={{fontSize:12,color:MT,marginTop:2}}>{sub?`Active · Expires ${new Date(sub.end_date).toLocaleDateString("en-IN")}`:"No active subscription"}</div>
+                  <div style={{fontSize:12,color:MT,marginTop:2}}>{sub?`Active · Expires ${new Date(sub.end_date).toLocaleDateString("en-IN")}`:t("no_active_sub",appLang)}</div>
                 </div>
                 <div style={{fontSize:22,fontWeight:900}}>{planInfo.price}</div>
               </div>
               <button onClick={onUpgrade} style={{width:"100%",background:planInfo.color,border:"none",color:"#fff",borderRadius:8,padding:"11px",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
-                {plan==="plan_premium"||plan==="premium"?"Manage Subscription":"Upgrade to Premium 👑"}
+                {plan==="plan_premium"||plan==="premium"?t("manage_subscription",appLang):`${t("upgrade_to_premium",appLang)} 👑`}
               </button>
             </div>
             {editName&&(
@@ -261,22 +261,11 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
               </Card>
             )}
             <Card>
-              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Personal Info</div>
-              <Row label="Full Name" sub={userData?.name||"Not set"} onClick={()=>{setEditName(true);setNewName(userData?.name||"");}}/>
-              <Row label="Mobile Number" sub={userData?.phone||"Not set"}/>
-              <Row label="Email Address" sub={userData?.email||"Not added"} onClick={()=>{setEditEmail(true);setNewEmail(userData?.email||"");}} last/>
+              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("personal_info",appLang)}</div>
+              <Row label={t("full_name",appLang)} sub={userData?.name||"Not set"} onClick={()=>{setEditName(true);setNewName(userData?.name||"");}}/>
+              <Row label={t("mobile_number",appLang)} sub={userData?.phone||"Not set"}/>
+              <Row label={t("email_address",appLang)} sub={userData?.email||"Not added"} last/>
             </Card>
-            {editEmail&&(
-              <Card>
-                <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Email Address</div>
-                <div style={{fontSize:12,color:MT,marginBottom:10}}>Used for login OTP and notifications</div>
-                <input className="inp" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Enter email address" type="email" autoFocus onKeyDown={e=>{if(e.key==="Enter")saveEmail();if(e.key==="Escape")setEditEmail(false);}}/>
-                <div style={{display:"flex",gap:8,marginTop:10}}>
-                  <button onClick={()=>setEditEmail(false)} style={{flex:1,background:"rgba(255,255,255,.06)",border:`1px solid ${BD}`,color:"#aaa",borderRadius:8,padding:"9px",fontSize:13,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>Cancel</button>
-                  <button onClick={saveEmail} disabled={savingEmail} style={{flex:2,background:RED,border:"none",color:"#fff",borderRadius:8,padding:"9px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>{savingEmail?"Saving...":"Save Email"}</button>
-                </div>
-              </Card>
-            )}
           </div>
         )}
 
@@ -346,8 +335,8 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
         {tab==="notifications"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:700}}>Notifications ({notifs.length})</div>
-              {unread>0&&<button onClick={async()=>{await db.markAllNotifsRead(user.id).catch(()=>{});setNotifs(n=>n.map(x=>({...x,is_read:true})));showToast("All marked read");}} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${BD}`,color:"#aaa",borderRadius:7,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>Mark all read</button>}
+              <div style={{fontSize:14,fontWeight:700}}>{t("alerts_tab",appLang)} ({notifs.length})</div>
+              {unread>0&&<button onClick={async()=>{await db.markAllNotifsRead(user.id).catch(()=>{});setNotifs(n=>n.map(x=>({...x,is_read:true})));showToast("All marked read");}} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${BD}`,color:"#aaa",borderRadius:7,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>{t("mark_all_read",appLang)}</button>}
             </div>
             <Card>
               {notifs.length===0?(
@@ -379,17 +368,16 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
 
             {/* Preferences */}
             <Card>
-              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Playback</div>
-              <Row label="Autoplay Next" sub="Auto-play next episode" right={<Toggle on={prefs.autoplay} onChange={()=>togglePref("autoplay")}/>}/>
-              <Row label="Skip Intro" sub="Automatically skip intros" right={<Toggle on={prefs.skipIntro} onChange={()=>togglePref("skipIntro")}/>}/>
-              <Row label="Notifications" sub="Push alerts for new content" right={<Toggle on={prefs.notifications} onChange={()=>togglePref("notifications")}/>}/>
-              <Row label="Email Alerts" sub={userData?.email?"Alerts to "+userData.email:"Add email first"} right={<Toggle on={prefs.emailAlerts} onChange={()=>togglePref("emailAlerts")}/>} last/>
+              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("playback",appLang)}</div>
+              <Row label={t("autoplay_next",appLang)} sub={t("autoplay_next_sub",appLang)} right={<Toggle on={prefs.autoplay} onChange={()=>togglePref("autoplay")}/>}/>
+              <Row label={t("notifications",appLang)} sub={t("notifications_sub",appLang)} right={<Toggle on={prefs.notifications} onChange={()=>togglePref("notifications")}/>}/>
+              <Row label={t("email_alerts",appLang)} sub={userData?.email?"Alerts to "+userData.email:"Add email first"} right={<Toggle on={prefs.emailAlerts} onChange={()=>togglePref("emailAlerts")}/>} last/>
             </Card>
 
             {/* Language */}
             <Card>
-              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Language</div>
-              <Row icon="🌐" label="App Language" sub={`${selLang.flag} ${selLang.label}`} onClick={()=>setShowLang(true)} last/>
+              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("language",appLang)}</div>
+              <Row icon="🌐" label={t("app_language",appLang)} sub={`${selLang.flag} ${selLang.label}`} onClick={()=>setShowLang(true)} last/>
             </Card>
             {showLang&&(
               <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.8)",display:"flex",alignItems:"flex-end"}} onClick={()=>setShowLang(false)}>
@@ -409,12 +397,12 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
 
             {/* Support & Help */}
             <Card>
-              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Support & Help</div>
+              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("support_help",appLang)}</div>
               {/* ← AI CUSTOMER SUPPORT BUTTON */}
-              <Row icon="🤖" label="AI Customer Support" sub="Chat with our AI — available 24/7" onClick={()=>setShowSupport(true)}/>
-              {installable&&<Row icon="📲" label="Install App" sub="Add StreamX to your home screen" onClick={async()=>{const ok=await promptInstall();if(ok)setInstallable(false);}}/>}
+              <Row icon="🤖" label={t("ai_support",appLang)} sub={t("ai_support_sub",appLang)} onClick={()=>setShowSupport(true)}/>
+              {installable&&<Row icon="📲" label={t("install_app",appLang)} sub={t("install_app_sub",appLang)} onClick={async()=>{const ok=await promptInstall();if(ok)setInstallable(false);}}/>}
               {"Notification" in window && Notification.permission!=="granted" && (
-                <Row icon="🔔" label="Enable Notifications" sub="Get notified about new releases" onClick={async()=>{
+                <Row icon="🔔" label={t("enable_notifications",appLang)} sub={t("enable_notifications_sub",appLang)} onClick={async()=>{
                   const perm=await Notification.requestPermission();
                   if(perm!=="granted"){showToast("Notifications blocked — enable in browser settings");return;}
                   const token=localStorage.getItem("streamx_token");
@@ -422,16 +410,16 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
                   showToast(ok?"Notifications enabled":"Could not enable notifications right now");
                 }}/>
               )}
-              <Row icon="📧" label="Email Support" sub="support@streamx.in" onClick={()=>window.open("mailto:support@streamx.in")}/>
-              <Row icon="📋" label="Terms of Use" onClick={()=>showToast("Coming soon")}/>
-              <Row icon="🔒" label="Privacy Policy" onClick={()=>showToast("Coming soon")} last/>
+              <Row icon="📧" label={t("email_support",appLang)} sub="support@streamx.in" onClick={()=>window.open("mailto:support@streamx.in")}/>
+              <Row icon="📋" label={t("terms",appLang)} onClick={()=>showToast("Coming soon")}/>
+              <Row icon="🔒" label={t("privacy",appLang)} onClick={()=>showToast("Coming soon")} last/>
             </Card>
 
             {/* Account */}
             <Card>
-              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Account</div>
-              <Row icon="🚪" label="Sign Out" sub="Sign out from this device" onClick={()=>{localStorage.removeItem("streamx_user");onLogout();}}/>
-              <Row icon="🗑️" label="Delete Account" sub="Permanently delete your account" onClick={()=>setShowDelete(true)} danger last/>
+              <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("account",appLang)}</div>
+              <Row icon="🚪" label={t("sign_out",appLang)} sub={t("sign_out_sub",appLang)} onClick={()=>{localStorage.removeItem("streamx_user");onLogout();}}/>
+              <Row icon="🗑️" label={t("delete_account",appLang)} sub={t("delete_account_sub",appLang)} onClick={()=>setShowDelete(true)} danger last/>
             </Card>
 
             {/* Delete confirm */}

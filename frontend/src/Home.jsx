@@ -301,7 +301,7 @@ export default function Home({ onNavigate, user, onUpgrade }) {
           </div>
         </div>
         {/* Category tabs */}
-        <div style={{display:"flex",overflowX:"auto",padding:"0 clamp(14px,4vw,24px)",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+        <div className="cattabs" style={{display:"flex",overflowX:"auto",padding:"0 clamp(14px,4vw,24px)",borderBottom:"1px solid rgba(255,255,255,.06)",scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {CATS.map(c=><button key={c} className={`pt${cat===c?" on":""}`} onClick={()=>setCat(c)}>{t(CAT_KEY[c], lang)}</button>)}
         </div>
       </nav>

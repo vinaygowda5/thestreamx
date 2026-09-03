@@ -44,6 +44,8 @@ export const TRANSLATIONS = {
     no_watchlist: "Nothing saved yet", no_watchlist_sub: "Tap + My List while watching",
     no_history: "No watch history yet", clear_all: "Clear All",
     home: "Home",
+    no_active_sub: "No active subscription", manage_subscription: "Manage Subscription",
+    upgrade_to_premium: "Upgrade to Premium", mark_all_read: "Mark all read",
   },
   kn: {
     nav_home: "ಮುಖಪುಟ", nav_search: "ಹುಡುಕಿ", nav_profile: "ಪ್ರೊಫೈಲ್", nav_admin: "ಅಡ್ಮಿನ್",
@@ -78,6 +80,8 @@ export const TRANSLATIONS = {
     no_watchlist: "ಇನ್ನೂ ಏನನ್ನೂ ಉಳಿಸಿಲ್ಲ", no_watchlist_sub: "ವೀಕ್ಷಿಸುವಾಗ + ನನ್ನ ಪಟ್ಟಿ ಒತ್ತಿ",
     no_history: "ಇನ್ನೂ ವೀಕ್ಷಣಾ ಇತಿಹಾಸವಿಲ್ಲ", clear_all: "ಎಲ್ಲಾ ತೆರವುಗೊಳಿಸಿ",
     home: "ಮುಖಪುಟ",
+    no_active_sub: "ಯಾವುದೇ ಸಕ್ರಿಯ ಚಂದಾದಾರಿಕೆ ಇಲ್ಲ", manage_subscription: "ಚಂದಾದಾರಿಕೆ ನಿರ್ವಹಿಸಿ",
+    upgrade_to_premium: "ಪ್ರೀಮಿಯಂಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ", mark_all_read: "ಎಲ್ಲವನ್ನೂ ಓದಿದಂತೆ ಗುರುತಿಸಿ",
   },
   hi: {
     nav_home: "होम", nav_search: "खोजें", nav_profile: "प्रोफ़ाइल", nav_admin: "एडमिन",
@@ -112,6 +116,8 @@ export const TRANSLATIONS = {
     no_watchlist: "अभी कुछ भी सहेजा नहीं गया", no_watchlist_sub: "देखते समय + मेरी सूची दबाएं",
     no_history: "अभी तक कोई देखने का इतिहास नहीं", clear_all: "सभी हटाएं",
     home: "होम",
+    no_active_sub: "कोई सक्रिय सदस्यता नहीं", manage_subscription: "सदस्यता प्रबंधित करें",
+    upgrade_to_premium: "प्रीमियम में अपग्रेड करें", mark_all_read: "सभी को पढ़ा हुआ चिह्नित करें",
   },
   ta: {
     nav_home: "முகப்பு", nav_search: "தேடு", nav_profile: "சுயவிவரம்", nav_admin: "நிர்வாகி",
@@ -146,6 +152,8 @@ export const TRANSLATIONS = {
     no_watchlist: "இன்னும் எதுவும் சேமிக்கப்படவில்லை", no_watchlist_sub: "பார்க்கும்போது + என் பட்டியலை தட்டவும்",
     no_history: "இன்னும் பார்வை வரலாறு இல்லை", clear_all: "அனைத்தையும் அழி",
     home: "முகப்பு",
+    no_active_sub: "செயலில் உள்ள சந்தா இல்லை", manage_subscription: "சந்தாவை நிர்வகிக்கவும்",
+    upgrade_to_premium: "பிரீமியத்திற்கு மேம்படுத்தவும்", mark_all_read: "அனைத்தையும் படித்ததாகக் குறி",
   },
   te: {
     nav_home: "హోమ్", nav_search: "వెతకండి", nav_profile: "ప్రొఫైల్", nav_admin: "అడ్మిన్",
@@ -180,6 +188,8 @@ export const TRANSLATIONS = {
     no_watchlist: "ఇంకా ఏమీ సేవ్ చేయలేదు", no_watchlist_sub: "చూస్తున్నప్పుడు + నా జాబితాను నొక్కండి",
     no_history: "ఇంకా వీక్షణ చరిత్ర లేదు", clear_all: "అన్నీ క్లియర్ చేయండి",
     home: "హోమ్",
+    no_active_sub: "క్రియాశీల సభ్యత్వం లేదు", manage_subscription: "సభ్యత్వాన్ని నిర్వహించండి",
+    upgrade_to_premium: "ప్రీమియంకు అప్‌గ్రేడ్ చేయండి", mark_all_read: "అన్నీ చదివినట్లు గుర్తించండి",
   },
   ml: {
     nav_home: "ഹോം", nav_search: "തിരയുക", nav_profile: "പ്രൊഫൈൽ", nav_admin: "അഡ്മിൻ",
@@ -214,6 +224,8 @@ export const TRANSLATIONS = {
     no_watchlist: "ഇതുവരെ ഒന്നും സേവ് ചെയ്തിട്ടില്ല", no_watchlist_sub: "കാണുമ്പോൾ + എന്റെ ലിസ്റ്റ് ടാപ്പ് ചെയ്യുക",
     no_history: "ഇതുവരെ കാഴ്ച ചരിത്രമില്ല", clear_all: "എല്ലാം മായ്ക്കുക",
     home: "ഹോം",
+    no_active_sub: "സജീവ സബ്സ്ക്രിപ്ഷൻ ഇല്ല", manage_subscription: "സബ്സ്ക്രിപ്ഷൻ നിയന്ത്രിക്കുക",
+    upgrade_to_premium: "പ്രീമിയത്തിലേക്ക് അപ്ഗ്രേഡ് ചെയ്യുക", mark_all_read: "എല്ലാം വായിച്ചതായി അടയാളപ്പെടുത്തുക",
   },
 };
 
