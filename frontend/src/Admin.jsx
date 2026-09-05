@@ -80,6 +80,24 @@ const PAGES=[
   {id:"settings",  icon:"⚙️", label:"Settings"},
 ];
 
+// Per-role sidebar visibility — SUPER_ADMIN (or legacy admin flag) sees
+// everything; other roles see only what the spec says they should.
+// Frontend filtering is UX only — the backend's requireSuperAdmin()/
+// authorize() checks are the actual security boundary regardless of this.
+const ROLE_PAGES = {
+  CONTENT_MANAGER: ["dashboard","content","settings"],
+  LIVE_MANAGER:    ["dashboard","live","settings"],
+  SUPPORT_MANAGER: ["dashboard","users","settings"],
+  FINANCE_MANAGER: ["dashboard","revenue","settings"],
+  ANALYST:         ["dashboard","analytics","settings"],
+};
+function visiblePages(employeeRole, legacyIsAdmin){
+  if(legacyIsAdmin || employeeRole==="SUPER_ADMIN" || !employeeRole) return PAGES;
+  const allowed=ROLE_PAGES[employeeRole];
+  if(!allowed) return PAGES; // unknown role — fail open to avoid locking someone out unexpectedly
+  return PAGES.filter(p=>allowed.includes(p.id));
+}
+
 const TYPES  =["Movie","Web Series","Documentary","Short Film","Kids","Anime","Reality Show"];
 const GENRES =["Action","Drama","Sci-Fi","Thriller","Comedy","Romance","Kids","Cricket","Football","Racing","News","Documentary","Nature","Horror","Sports","Music","Reality","Anime","Devotional"];
 const LANGS  =["Hindi","English","Kannada","Tamil","Telugu","Bengali","Malayalam","Punjabi","Marathi","Gujarati","Bhojpuri","Odia","Urdu","Sanskrit"];
@@ -663,8 +681,14 @@ function ContentList({content,isLiveList=false,onRefresh,showToast}){
     setSaving(false);
   }
   async function realDelete(c){
-    try{const{error}=await supabase.from("content").delete().eq("id",c.id);if(error)throw error;showToast("Deleted: "+c.title);setConfirm(null);onRefresh();}
-    catch(e){showToast("Delete failed","err");}
+    try{
+      const token=localStorage.getItem("streamx_token");
+      const res=await fetch(`${API}/api/admin/content/${c.id}`,{method:"DELETE",headers:{Authorization:`Bearer ${token}`}});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast(json.msg||"Deleted: "+c.title);
+      setConfirm(null);onRefresh();
+    }catch(e){showToast("Delete failed: "+e.message,"err");}
   }
   return(
     <div style={{animation:"fadeIn .3s ease"}}>
@@ -1340,7 +1364,7 @@ function RevenuePage({stats,users}){
 }
 
 // ── MAIN ADMIN ────────────────────────────────────────────
-export default function Admin({onNavigate,user}){
+export default function Admin({onNavigate,user,employeeRole}){
   const[verified, setVerified]=useState(false);
   const[showFace, setShowFace]=useState(true);
   const[page,     setPage]    =useState("dashboard");
@@ -1408,7 +1432,7 @@ export default function Admin({onNavigate,user}){
 
         {/* Nav */}
         <div style={{flex:1,overflowY:"auto",padding:"10px 8px"}}>
-          {PAGES.map(p=>(
+          {visiblePages(employeeRole, user?.role==="admin").map(p=>(
             <div key={p.id} className={`nav${page===p.id?" on":""}`} onClick={()=>setPage(p.id)} style={{justifyContent:collapsed?"center":"flex-start",marginBottom:2}} title={collapsed?p.label:undefined}>
               <span style={{fontSize:16,flexShrink:0}}>{p.icon}</span>
               {!collapsed&&<span style={{fontSize:13}}>{p.label}</span>}

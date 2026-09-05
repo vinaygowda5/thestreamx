@@ -6,6 +6,7 @@ import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
 import Payment from "./Payment.jsx";
 import { t } from "./i18n.js";
+import { API } from "./config.js";
 
 const ADMIN_PHONES = ["+918660570052", "+919000000000", "+919000000001"];
 const ADMIN_EMAILS = ["admin@streamx.in", "vinaygowdaw@gmail.com"];
@@ -15,6 +16,21 @@ export default function App() {
   const [page,    setPage]    = useState("home");
   const [loading, setLoading] = useState(true);
   const [upgrade, setUpgrade] = useState(false);
+  const [employeeRole, setEmployeeRole] = useState(null); // null = not an employee (or not checked yet)
+
+  async function checkEmployeeStatus() {
+    try {
+      const token = localStorage.getItem("streamx_token");
+      if (!token) return;
+      const res = await fetch(`${API}/api/employees/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success && json.data?.isEmployee && json.data?.status === "ACTIVE") {
+        setEmployeeRole(json.data.roleName);
+      } else {
+        setEmployeeRole(null);
+      }
+    } catch (e) { setEmployeeRole(null); }
+  }
 
   useEffect(() => {
     // Load user from localStorage — instant, no delay
@@ -22,7 +38,7 @@ export default function App() {
       const saved = localStorage.getItem("streamx_user");
       if (saved) {
         const u = JSON.parse(saved);
-        if (u?.id) { setUser(u); setPage("home"); }
+        if (u?.id) { setUser(u); setPage("home"); checkEmployeeStatus(); }
       }
     } catch (e) {}
     setLoading(false);
@@ -34,19 +50,21 @@ export default function App() {
     localStorage.setItem("streamx_user", JSON.stringify(userData));
     setUser(userData);
     setPage("home");
+    checkEmployeeStatus();
   }
 
   function handleLogout() {
     localStorage.removeItem("streamx_user");
     setUser(null);
+    setEmployeeRole(null);
     setPage("home");
   }
 
   function handleNavigate(p) {
-    // Admin check
+    // Admin check — allow the legacy admin flag OR any active employee role
     if (p === "admin") {
       const isAdmin = user && (ADMIN_PHONES.includes(user.phone) || ADMIN_EMAILS.includes(user.email) || user.role === "admin");
-      if (!isAdmin) { alert("Admin access only!"); return; }
+      if (!isAdmin && !employeeRole) { alert("Admin access only!"); return; }
     }
     setPage(p);
     window.scrollTo(0, 0);
@@ -85,7 +103,7 @@ export default function App() {
       {/* Pages */}
       {page === "home"    && <Home    onNavigate={handleNavigate} user={user} onUpgrade={() => setUpgrade(true)} />}
       {page === "profile" && <Profile onNavigate={handleNavigate} user={user} onLogout={handleLogout} onUpgrade={() => setUpgrade(true)} />}
-      {page === "admin"   && <Admin   onNavigate={handleNavigate} user={user} />}
+      {page === "admin"   && <Admin   onNavigate={handleNavigate} user={user} employeeRole={employeeRole} />}
       {page === "search"  && <Search  onNavigate={handleNavigate} user={user} onClose={() => setPage("home")} />}
 
       {/* Bottom Nav — Mobile */}
@@ -97,7 +115,7 @@ export default function App() {
               { id: "home",    icon: <img src="./icons/home.svg" width="24" height="24" />, label: t("nav_home", lang)    },
               { id: "search",  icon: <img src="./icons/search.svg" width="24" height="24" />, label: t("nav_search", lang)  },
               { id: "profile", icon: <img src="./icons/profile.svg" width="24" height="24" />, label: t("nav_profile", lang) },
-              ...(user?.role === "admin" ? [{ id: "admin", icon: <img src="./icons/admin.svg" width="24" height="24" />, label: t("nav_admin", lang) }] : []),
+              ...((user?.role === "admin" || employeeRole) ? [{ id: "admin", icon: <img src="./icons/admin.svg" width="24" height="24" />, label: t("nav_admin", lang) }] : []),
             ];
           })().map(tab => (
             <button key={tab.id} onClick={() => handleNavigate(tab.id)} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer", padding: "4px 0" }}>

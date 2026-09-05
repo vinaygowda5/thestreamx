@@ -1,6 +1,16 @@
 const sb = require("../models/db");
 const { ok, err } = require("../utils/response");
 const { logAudit } = require("../middleware/audit");
+const { loadEmployeeContext } = require("../middleware/authorize");
+
+// Lets the frontend check "am I an employee, and what can I see" right
+// after login — this is what makes the Admin tab/routes actually work
+// for non-Super-Admin employees, not just the legacy admin flag.
+async function whoAmI(req, res) {
+  const ctx = await loadEmployeeContext(req.user.id);
+  if (!ctx || !ctx.roleName) return ok(res, { isEmployee: false });
+  return ok(res, { isEmployee: true, roleName: ctx.roleName, status: ctx.status });
+}
 
 async function listEmployees(req, res) {
   const { data, error } = await sb.from("users")
@@ -67,4 +77,4 @@ async function reactivateEmployee(req, res) {
   return ok(res, null, "Employee reactivated");
 }
 
-module.exports = { listEmployees, createEmployee, updateEmployeeRole, disableEmployee, reactivateEmployee };
+module.exports = { listEmployees, createEmployee, updateEmployeeRole, disableEmployee, reactivateEmployee, whoAmI };
