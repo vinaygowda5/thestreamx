@@ -15,7 +15,7 @@ async function createEmployee(req, res) {
   const { email, roleName } = req.body;
   if (!email || !roleName) return err(res, "email and roleName required");
 
-  const { data: existingUser } = await sb.from("users").select("id").eq("email", email.toLowerCase().trim()).single();
+  const { data: existingUser } = await sb.from("users").select("id").ilike("email", email.toLowerCase().trim()).single();
   if (!existingUser) return err(res, "No user found with that email — they must sign up on StreamX first", 404);
 
   const { data: role } = await sb.from("roles").select("id").eq("name", roleName).single();
