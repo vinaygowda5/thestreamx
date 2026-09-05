@@ -12,18 +12,21 @@ async function listEmployees(req, res) {
 
 async function createEmployee(req, res) {
   if (!req.isSuperAdmin) return err(res, "Only Super Admin can create employees", 403);
-  const { userId, roleName } = req.body; // promote an existing user to employee
-  if (!userId || !roleName) return err(res, "userId and roleName required");
+  const { email, roleName } = req.body;
+  if (!email || !roleName) return err(res, "email and roleName required");
+
+  const { data: existingUser } = await sb.from("users").select("id").eq("email", email.toLowerCase().trim()).single();
+  if (!existingUser) return err(res, "No user found with that email — they must sign up on StreamX first", 404);
 
   const { data: role } = await sb.from("roles").select("id").eq("name", roleName).single();
   if (!role) return err(res, "Unknown role: " + roleName, 400);
 
   const { data, error } = await sb.from("users")
     .update({ employee_role_id: role.id, employee_status: "ACTIVE" })
-    .eq("id", userId).select().single();
+    .eq("id", existingUser.id).select().single();
   if (error) return err(res, error.message, 500);
 
-  await logAudit({ req, action: "CREATED_EMPLOYEE", resourceType: "employee", resourceId: userId, after: { roleName } });
+  await logAudit({ req, action: "CREATED_EMPLOYEE", resourceType: "employee", resourceId: existingUser.id, after: { roleName, email } });
   return ok(res, data, "Employee created");
 }
 

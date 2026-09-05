@@ -1075,7 +1075,7 @@ const ROLE_OPTIONS=["SUPER_ADMIN","CONTENT_MANAGER","LIVE_MANAGER","SUPPORT_MANA
 function EmployeesPage({showToast}){
   const[employees,setEmployees]=useState([]);
   const[loading,setLoading]=useState(true);
-  const[newUserId,setNewUserId]=useState("");
+  const[newEmail,setNewEmail]=useState("");
   const[newRole,setNewRole]=useState("CONTENT_MANAGER");
   const[creating,setCreating]=useState(false);
 
@@ -1093,13 +1093,13 @@ function EmployeesPage({showToast}){
   useEffect(()=>{load();},[]);
 
   async function createEmployee(){
-    if(!newUserId.trim())return showToast("Enter the user's ID","err");
+    if(!newEmail.trim())return showToast("Enter the person's email","err");
     setCreating(true);
     try{
-      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({userId:newUserId.trim(),roleName:newRole})});
+      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({email:newEmail.trim(),roleName:newRole})});
       const json=await res.json();
       if(!json.success)throw new Error(json.msg);
-      showToast("Employee created ✓");setNewUserId("");load();
+      showToast("Employee created ✓");setNewEmail("");load();
     }catch(e){showToast("Failed: "+e.message,"err");}
     setCreating(false);
   }
@@ -1129,9 +1129,9 @@ function EmployeesPage({showToast}){
 
       <div className="card" style={{padding:20,marginBottom:20}}>
         <div style={{fontSize:12,color:"#3a3a5a",fontWeight:700,textTransform:"uppercase",letterSpacing:.7,marginBottom:14}}>Add Employee</div>
-        <div style={{fontSize:11,color:"#666688",marginBottom:12}}>Promote an existing user (by their user ID) to an employee role. Find the user ID in the Users page.</div>
+        <div style={{fontSize:11,color:"#666688",marginBottom:12}}>Enter the email of a StreamX account you want to promote to an employee role. They must have already signed up (logged in at least once) — you can't create a brand new account from here.</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <input value={newUserId} onChange={e=>setNewUserId(e.target.value)} placeholder="User ID (uuid)" style={{flex:2,minWidth:200,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
+          <input value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="employee@example.com" type="email" style={{flex:2,minWidth:200,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
           <select value={newRole} onChange={e=>setNewRole(e.target.value)} style={{flex:1,minWidth:160,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}>
             {ROLE_OPTIONS.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
