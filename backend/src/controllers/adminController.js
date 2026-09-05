@@ -1,5 +1,7 @@
 const sb = require("../models/db");
 const { ok, err } = require("../utils/response");
+const { logAudit } = require("../middleware/audit");
+const { createApprovalRequest } = require("./approvalController");
 
 async function getStats(req, res) {
   const [u, c, s, t, a] = await Promise.all([
@@ -52,9 +54,27 @@ async function updateContent(req, res) {
 }
 
 async function deleteContent(req, res) {
-  const { error } = await sb.from("content").delete().eq("id", req.params.id);
-  if (error) return err(res, error.message);
-  return ok(res, null, "Content deleted");
+  const { id } = req.params;
+  const { reason } = req.body || {};
+
+  if (req.isSuperAdmin) {
+    // Super Admin acts immediately — still soft-delete (recoverable), not destroyed.
+    const { error } = await sb.from("content")
+      .update({ is_active: false, deleted_at: new Date().toISOString(), deleted_by: req.user.id })
+      .eq("id", id);
+    if (error) return err(res, error.message);
+    await logAudit({ req, action: "DELETE_MOVIE", resourceType: "content", resourceId: id });
+    return ok(res, null, "Content deleted");
+  }
+
+  // Any other employee: cannot delete directly. Creates an approval
+  // request instead — this is the actual security boundary, enforced
+  // server-side, not just a hidden button on the frontend.
+  const request = await createApprovalRequest({
+    req, action: "DELETE_MOVIE", resourceType: "content", resourceId: id,
+    payload: { contentId: id }, reason,
+  });
+  return ok(res, { requestId: request.id }, "Your request has been submitted for Super Admin approval.");
 }
 
 async function getAllAds(req, res) {

@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const { requireAdmin } = require("../middleware/auth");
+const { authorize, identify } = require("../middleware/authorize");
 const c = require("../controllers/adminController");
 router.get("/stats",           requireAdmin, c.getStats);
 router.get("/users",           requireAdmin, c.getAllUsers);
@@ -8,7 +9,7 @@ router.put("/users/:id/activate",requireAdmin, c.activateUser);
 router.get("/content",         requireAdmin, c.getAllContent);
 router.post("/content",        requireAdmin, c.addContent);
 router.put("/content/:id",     requireAdmin, c.updateContent);
-router.delete("/content/:id",  requireAdmin, c.deleteContent);
+router.delete("/content/:id",  requireAdmin, identify(), c.deleteContent);
 router.get("/ads",             requireAdmin, c.getAllAds);
 router.post("/ads",            requireAdmin, c.addAd);
 router.put("/ads/:id",         requireAdmin, c.updateAd);

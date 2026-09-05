@@ -80,6 +80,9 @@ app.use("/api/support",       require("./src/routes/support"));
 app.use("/api/notifications", require("./src/routes/notifications"));
 app.use("/api/push",          require("./src/routes/push"));
 app.use("/api/analytics",     require("./src/routes/analytics"));
+app.use("/api/approvals",     require("./src/routes/approvals"));
+app.use("/api/employees",     require("./src/routes/employees"));
+app.use("/api/audit-logs",    require("./src/routes/auditlogs"));
 
 app.get("/", (req,res) => res.json({
   status: "✅ StreamX Backend Running",
