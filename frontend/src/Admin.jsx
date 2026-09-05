@@ -74,6 +74,9 @@ const PAGES=[
   {id:"users",     icon:"👥", label:"Users"},
   {id:"ads",       icon:"📢", label:"Ads Manager"},
   {id:"revenue",   icon:"💰", label:"Revenue"},
+  {id:"employees", icon:"🧑‍💼", label:"Employees"},
+  {id:"approvals", icon:"✅", label:"Approvals"},
+  {id:"auditlogs", icon:"📜", label:"Audit Logs"},
   {id:"settings",  icon:"⚙️", label:"Settings"},
 ];
 
@@ -1066,6 +1069,196 @@ function AdsPage({ads,onRefresh,showToast}){
   );
 }
 
+// ── EMPLOYEES PAGE ────────────────────────────────────────
+const ROLE_OPTIONS=["SUPER_ADMIN","CONTENT_MANAGER","LIVE_MANAGER","SUPPORT_MANAGER","FINANCE_MANAGER","ANALYST"];
+
+function EmployeesPage({showToast}){
+  const[employees,setEmployees]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[newUserId,setNewUserId]=useState("");
+  const[newRole,setNewRole]=useState("CONTENT_MANAGER");
+  const[creating,setCreating]=useState(false);
+
+  const authHeader=()=>({Authorization:`Bearer ${localStorage.getItem("streamx_token")}`});
+
+  async function load(){
+    setLoading(true);
+    try{
+      const res=await fetch(`${API}/api/employees`,{headers:authHeader()});
+      const json=await res.json();
+      setEmployees(json.success?json.data:[]);
+    }catch(e){setEmployees([]);}
+    setLoading(false);
+  }
+  useEffect(()=>{load();},[]);
+
+  async function createEmployee(){
+    if(!newUserId.trim())return showToast("Enter the user's ID","err");
+    setCreating(true);
+    try{
+      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({userId:newUserId.trim(),roleName:newRole})});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Employee created ✓");setNewUserId("");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+    setCreating(false);
+  }
+
+  async function disable(id){
+    if(!confirm("Disable this employee? This revokes all their sessions immediately."))return;
+    try{
+      const res=await fetch(`${API}/api/employees/${id}/disable`,{method:"POST",headers:authHeader()});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Employee disabled — sessions revoked");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
+  async function reactivate(id){
+    try{
+      const res=await fetch(`${API}/api/employees/${id}/reactivate`,{method:"POST",headers:authHeader()});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Employee reactivated");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
+  return(
+    <div style={{animation:"fadeIn .3s ease",maxWidth:800}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:22}}>Employees</div>
+
+      <div className="card" style={{padding:20,marginBottom:20}}>
+        <div style={{fontSize:12,color:"#3a3a5a",fontWeight:700,textTransform:"uppercase",letterSpacing:.7,marginBottom:14}}>Add Employee</div>
+        <div style={{fontSize:11,color:"#666688",marginBottom:12}}>Promote an existing user (by their user ID) to an employee role. Find the user ID in the Users page.</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <input value={newUserId} onChange={e=>setNewUserId(e.target.value)} placeholder="User ID (uuid)" style={{flex:2,minWidth:200,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
+          <select value={newRole} onChange={e=>setNewRole(e.target.value)} style={{flex:1,minWidth:160,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}>
+            {ROLE_OPTIONS.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+          <button onClick={createEmployee} disabled={creating} style={{background:R,border:"none",color:"#fff",borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>{creating?"Adding...":"Add"}</button>
+        </div>
+      </div>
+
+      <div className="card" style={{padding:0,overflow:"hidden"}}>
+        {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
+        employees.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No employees yet</div>:
+        employees.map((emp,i)=>(
+          <div key={emp.id} style={{display:"flex",alignItems:"center",gap:14,padding:16,borderBottom:i<employees.length-1?"1px solid #181828":"none"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14}}>{emp.name||"Unnamed"}</div>
+              <div style={{fontSize:11,color:"#666688"}}>{emp.email} · {emp.role?.name||"No role"}</div>
+            </div>
+            <span style={{fontSize:10,fontWeight:800,padding:"3px 10px",borderRadius:20,background:emp.employee_status==="ACTIVE"?"rgba(0,200,83,.12)":"rgba(248,113,113,.12)",color:emp.employee_status==="ACTIVE"?GR:"#f87171"}}>{emp.employee_status}</span>
+            {emp.employee_status==="ACTIVE"
+              ?<button onClick={()=>disable(emp.id)} style={{background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Disable</button>
+              :<button onClick={()=>reactivate(emp.id)} style={{background:"rgba(0,200,83,.1)",border:"1px solid rgba(0,200,83,.3)",color:GR,borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Reactivate</button>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── APPROVALS PAGE ────────────────────────────────────────
+function ApprovalsPage({showToast}){
+  const[requests,setRequests]=useState([]);
+  const[loading,setLoading]=useState(true);
+
+  const authHeader=()=>({Authorization:`Bearer ${localStorage.getItem("streamx_token")}`});
+
+  async function load(){
+    setLoading(true);
+    try{
+      const res=await fetch(`${API}/api/approvals?status=PENDING`,{headers:authHeader()});
+      const json=await res.json();
+      setRequests(json.success?json.data:[]);
+    }catch(e){setRequests([]);}
+    setLoading(false);
+  }
+  useEffect(()=>{load();},[]);
+
+  async function approve(id){
+    try{
+      const res=await fetch(`${API}/api/approvals/${id}/approve`,{method:"POST",headers:authHeader()});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Approved and executed ✓");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+  async function reject(id){
+    const reason=prompt("Reason for rejection (optional):")||"";
+    try{
+      const res=await fetch(`${API}/api/approvals/${id}/reject`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({reason})});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Rejected — no changes made");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
+  return(
+    <div style={{animation:"fadeIn .3s ease",maxWidth:800}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:22}}>Approval Requests</div>
+      <div className="card" style={{padding:0,overflow:"hidden"}}>
+        {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
+        requests.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No pending requests</div>:
+        requests.map((req,i)=>(
+          <div key={req.id} style={{padding:18,borderBottom:i<requests.length-1?"1px solid #181828":"none"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:800,color:R}}>{req.action}</div>
+                <div style={{fontSize:12,color:"#666688",marginTop:2}}>Requested by {req.requester?.name||"Unknown"} ({req.requester?.email})</div>
+              </div>
+              <span style={{fontSize:10,fontWeight:800,padding:"3px 10px",borderRadius:20,background:"rgba(245,158,11,.12)",color:AM}}>PENDING</span>
+            </div>
+            <div style={{fontSize:12,color:"#8888aa",marginBottom:4}}>Target: {req.resource_type} · {req.resource_id}</div>
+            {req.reason&&<div style={{fontSize:12,color:"#8888aa",marginBottom:10}}>Reason: {req.reason}</div>}
+            <div style={{fontSize:10,color:"#3a3a5a",marginBottom:12}}>{new Date(req.created_at).toLocaleString()}</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>approve(req.id)} style={{background:GR,border:"none",color:"#04040e",borderRadius:8,padding:"8px 18px",fontWeight:800,fontSize:12,cursor:"pointer"}}>✓ APPROVE</button>
+              <button onClick={()=>reject(req.id)} style={{background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",borderRadius:8,padding:"8px 18px",fontWeight:800,fontSize:12,cursor:"pointer"}}>✕ REJECT</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── AUDIT LOGS PAGE ───────────────────────────────────────
+function AuditLogsPage(){
+  const[logs,setLogs]=useState([]);
+  const[loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const res=await fetch(`${API}/api/audit-logs?limit=200`,{headers:{Authorization:`Bearer ${localStorage.getItem("streamx_token")}`}});
+        const json=await res.json();
+        setLogs(json.success?json.data:[]);
+      }catch(e){setLogs([]);}
+      setLoading(false);
+    })();
+  },[]);
+
+  return(
+    <div style={{animation:"fadeIn .3s ease",maxWidth:900}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:22}}>Audit Logs</div>
+      <div className="card" style={{padding:0,overflow:"hidden",maxHeight:600,overflowY:"auto"}}>
+        {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
+        logs.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No audit entries yet</div>:
+        logs.map((log,i)=>(
+          <div key={log.id} style={{padding:"12px 18px",borderBottom:i<logs.length-1?"1px solid #181828":"none",fontSize:12}}>
+            <span style={{color:log.result==="denied"?"#f87171":log.result==="error"?AM:GR,fontWeight:700}}>{log.action}</span>
+            <span style={{color:"#666688"}}> · {log.user_name||log.user_id||"system"} ({log.role||"—"})</span>
+            {log.resource_type&&<span style={{color:"#666688"}}> · {log.resource_type}:{log.resource_id}</span>}
+            <div style={{color:"#3a3a5a",fontSize:10,marginTop:2}}>{new Date(log.created_at).toLocaleString()}{log.reason?` · ${log.reason}`:""}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── REVENUE PAGE ──────────────────────────────────────────
 function RevenuePage({stats,users}){
   const premium=(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium");
@@ -1349,6 +1542,9 @@ export default function Admin({onNavigate,user}){
           {page==="users"     &&<UsersPage users={users} onRefresh={loadData} showToast={showToast}/>}
           {page==="ads"       &&<AdsPage ads={ads} onRefresh={loadData} showToast={showToast}/>}
           {page==="revenue"   &&<RevenuePage stats={stats} users={users}/>}
+          {page==="employees" &&<EmployeesPage showToast={showToast}/>}
+          {page==="approvals" &&<ApprovalsPage showToast={showToast}/>}
+          {page==="auditlogs" &&<AuditLogsPage/>}
 
           {page==="settings"&&(
             <div style={{animation:"fadeIn .3s ease",maxWidth:600}}>
