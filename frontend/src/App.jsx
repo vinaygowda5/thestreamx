@@ -5,6 +5,7 @@ import Profile from "./Profile.jsx";
 import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
 import Payment from "./Payment.jsx";
+import EmployeeLogin from "./EmployeeLogin.jsx";
 import { t } from "./i18n.js";
 import { API } from "./config.js";
 
@@ -17,6 +18,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [upgrade, setUpgrade] = useState(false);
   const [employeeRole, setEmployeeRole] = useState(null); // null = not an employee (or not checked yet)
+  const [showStaffLogin, setShowStaffLogin] = useState(false);
 
   async function checkEmployeeStatus() {
     try {
@@ -53,8 +55,24 @@ export default function App() {
     checkEmployeeStatus();
   }
 
+  // Employee ID+password login (no OTP) — goes straight into the Admin
+  // panel, never through the customer Home screen.
+  function handleEmployeeLogin(employeeData) {
+    const userData = { id: employeeData.id, name: employeeData.name, email: employeeData.email, role: "employee" };
+    localStorage.setItem("streamx_user", JSON.stringify(userData));
+    setUser(userData);
+    setEmployeeRole(employeeData.roleName);
+    setShowStaffLogin(false);
+    setPage("admin");
+  }
+
   function handleLogout() {
+    const token = localStorage.getItem("streamx_token");
+    if (employeeRole && token) {
+      fetch(`${API}/api/employee-auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    }
     localStorage.removeItem("streamx_user");
+    localStorage.removeItem("streamx_token");
     setUser(null);
     setEmployeeRole(null);
     setPage("home");
@@ -82,7 +100,17 @@ export default function App() {
     </div>
   );
 
-  if (!user) return <Login onLogin={handleLogin} />;
+  if (!user) {
+    if (showStaffLogin) return <EmployeeLogin onLogin={handleEmployeeLogin} onBack={() => setShowStaffLogin(false)} />;
+    return (
+      <div style={{ position: "relative" }}>
+        <Login onLogin={handleLogin} />
+        <button onClick={() => setShowStaffLogin(true)} style={{ position: "fixed", bottom: 14, right: 14, zIndex: 500, background: "rgba(255,255,255,.06)", border: "1px solid #1a1a26", color: "#666", borderRadius: 20, padding: "7px 14px", fontSize: 11, cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+          Staff Login
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#07070c" }}>

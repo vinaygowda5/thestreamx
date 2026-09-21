@@ -75,6 +75,7 @@ const PAGES=[
   {id:"ads",       icon:"📢", label:"Ads Manager"},
   {id:"revenue",   icon:"💰", label:"Revenue"},
   {id:"employees", icon:"🧑‍💼", label:"Employees"},
+  {id:"tickets",   icon:"🎧", label:"Support Tickets"},
   {id:"approvals", icon:"✅", label:"Approvals"},
   {id:"auditlogs", icon:"📜", label:"Audit Logs"},
   {id:"settings",  icon:"⚙️", label:"Settings"},
@@ -85,11 +86,19 @@ const PAGES=[
 // Frontend filtering is UX only — the backend's requireSuperAdmin()/
 // authorize() checks are the actual security boundary regardless of this.
 const ROLE_PAGES = {
-  CONTENT_MANAGER: ["dashboard","content","settings"],
-  LIVE_MANAGER:    ["dashboard","live","settings"],
-  SUPPORT_MANAGER: ["dashboard","users","settings"],
-  FINANCE_MANAGER: ["dashboard","revenue","settings"],
-  ANALYST:         ["dashboard","analytics","settings"],
+  CONTENT_MANAGER:      ["dashboard","content","employees","settings"],
+  CONTENT_TEAM_LEADER:  ["dashboard","content","employees","settings"],
+  CONTENT_TEAM_MEMBER:  ["dashboard","content","settings"],
+  LIVE_MANAGER:         ["dashboard","live","employees","settings"],
+  LIVE_TEAM_LEADER:     ["dashboard","live","employees","settings"],
+  LIVE_TEAM_MEMBER:     ["dashboard","live","settings"],
+  SUPPORT_MANAGER:      ["dashboard","users","tickets","employees","settings"],
+  SUPPORT_TEAM_LEADER:  ["dashboard","users","tickets","employees","settings"],
+  SUPPORT_TEAM_MEMBER:  ["dashboard","tickets","settings"],
+  FINANCE_MANAGER:      ["dashboard","revenue","employees","settings"],
+  FINANCE_TEAM_LEADER:  ["dashboard","revenue","employees","settings"],
+  FINANCE_TEAM_MEMBER:  ["dashboard","revenue","settings"],
+  ANALYST:              ["dashboard","analytics","settings"],
 };
 function visiblePages(employeeRole, legacyIsAdmin){
   if(legacyIsAdmin || employeeRole==="SUPER_ADMIN" || !employeeRole) return PAGES;
@@ -1099,11 +1108,47 @@ const ROLE_OPTIONS=["SUPER_ADMIN","CONTENT_MANAGER","LIVE_MANAGER","SUPPORT_MANA
 function EmployeesPage({showToast}){
   const[employees,setEmployees]=useState([]);
   const[loading,setLoading]=useState(true);
+  const[newName,setNewName]=useState("");
   const[newEmail,setNewEmail]=useState("");
-  const[newRole,setNewRole]=useState("CONTENT_MANAGER");
+  const[newRole,setNewRole]=useState("");
+  const[myDept,setMyDept]=useState(null);
+  const[myTier,setMyTier]=useState(null);
   const[creating,setCreating]=useState(false);
+  const[credModal,setCredModal]=useState(null); // {employeeId,password,email} shown once
+  const[tab,setTab]=useState("team"); // team | activity
 
   const authHeader=()=>({Authorization:`Bearer ${localStorage.getItem("streamx_token")}`});
+
+  const ALL_ROLES=[
+    {name:"CONTENT_MANAGER",dept:"CONTENT",tier:"MANAGER"},
+    {name:"CONTENT_TEAM_LEADER",dept:"CONTENT",tier:"TEAM_LEADER"},
+    {name:"CONTENT_TEAM_MEMBER",dept:"CONTENT",tier:"TEAM_MEMBER"},
+    {name:"LIVE_MANAGER",dept:"LIVE",tier:"MANAGER"},
+    {name:"LIVE_TEAM_LEADER",dept:"LIVE",tier:"TEAM_LEADER"},
+    {name:"LIVE_TEAM_MEMBER",dept:"LIVE",tier:"TEAM_MEMBER"},
+    {name:"SUPPORT_MANAGER",dept:"SUPPORT",tier:"MANAGER"},
+    {name:"SUPPORT_TEAM_LEADER",dept:"SUPPORT",tier:"TEAM_LEADER"},
+    {name:"SUPPORT_TEAM_MEMBER",dept:"SUPPORT",tier:"TEAM_MEMBER"},
+    {name:"FINANCE_MANAGER",dept:"FINANCE",tier:"MANAGER"},
+    {name:"FINANCE_TEAM_LEADER",dept:"FINANCE",tier:"TEAM_LEADER"},
+    {name:"FINANCE_TEAM_MEMBER",dept:"FINANCE",tier:"TEAM_MEMBER"},
+    {name:"ANALYST",dept:"ANALYTICS",tier:"MANAGER"},
+  ];
+  const tierRank={MANAGER:3,TEAM_LEADER:2,TEAM_MEMBER:1};
+  // Which roles THIS logged-in employee is allowed to create:
+  // Super Admin -> everything. A Manager/Team Leader -> only their own
+  // department, at a tier strictly below their own.
+  const creatableRoles = myTier==="SUPER" ? ALL_ROLES
+    : ALL_ROLES.filter(r=>r.dept===myDept && tierRank[r.tier]<tierRank[myTier]);
+
+  async function loadMe(){
+    try{
+      const res=await fetch(`${API}/api/employees/me`,{headers:authHeader()});
+      const json=await res.json();
+      if(json.success&&json.data?.isEmployee){setMyDept(json.data.department);setMyTier(json.data.tier);}
+      else{setMyTier("SUPER");} // legacy admin flag falls back here
+    }catch(e){setMyTier("SUPER");}
+  }
 
   async function load(){
     setLoading(true);
@@ -1114,16 +1159,19 @@ function EmployeesPage({showToast}){
     }catch(e){setEmployees([]);}
     setLoading(false);
   }
-  useEffect(()=>{load();},[]);
+  useEffect(()=>{loadMe();load();},[]);
+  useEffect(()=>{if(creatableRoles.length&&!newRole)setNewRole(creatableRoles[0].name);},[myDept,myTier]);
 
   async function createEmployee(){
-    if(!newEmail.trim())return showToast("Enter the person's email","err");
+    if(!newName.trim()||!newEmail.trim())return showToast("Enter name and email","err");
     setCreating(true);
     try{
-      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({email:newEmail.trim(),roleName:newRole})});
+      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({name:newName.trim(),email:newEmail.trim(),roleName:newRole})});
       const json=await res.json();
       if(!json.success)throw new Error(json.msg);
-      showToast("Employee created ✓");setNewEmail("");load();
+      setCredModal({employeeId:json.data.employeeId,password:json.data.password,email:json.data.email,name:json.data.name});
+      setNewName("");setNewEmail("");
+      load();
     }catch(e){showToast("Failed: "+e.message,"err");}
     setCreating(false);
   }
@@ -1147,43 +1195,121 @@ function EmployeesPage({showToast}){
     }catch(e){showToast("Failed: "+e.message,"err");}
   }
 
+  async function resetPassword(id,name){
+    if(!confirm(`Generate a new password for ${name}? Their old password will stop working immediately.`))return;
+    try{
+      const res=await fetch(`${API}/api/employees/${id}/reset-password`,{method:"POST",headers:authHeader()});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      setCredModal({password:json.data.password,name,resetOnly:true});
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
   return(
     <div style={{animation:"fadeIn .3s ease",maxWidth:800}}>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:22}}>Employees</div>
-
-      <div className="card" style={{padding:20,marginBottom:20}}>
-        <div style={{fontSize:12,color:"#3a3a5a",fontWeight:700,textTransform:"uppercase",letterSpacing:.7,marginBottom:14}}>Add Employee</div>
-        <div style={{fontSize:11,color:"#666688",marginBottom:12}}>Enter the email of a StreamX account you want to promote to an employee role. They must have already signed up (logged in at least once) — you can't create a brand new account from here.</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <input value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="employee@example.com" type="email" style={{flex:2,minWidth:200,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
-          <select value={newRole} onChange={e=>setNewRole(e.target.value)} style={{flex:1,minWidth:160,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}>
-            {ROLE_OPTIONS.map(r=><option key={r} value={r}>{r}</option>)}
-          </select>
-          <button onClick={createEmployee} disabled={creating} style={{background:R,border:"none",color:"#fff",borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>{creating?"Adding...":"Add"}</button>
-        </div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:6}}>
+        {myTier==="SUPER"?"All Employees":`${myDept} Department`}
+      </div>
+      <div style={{fontSize:12,color:"#666688",marginBottom:20}}>
+        {myTier==="SUPER"?"Every manager and employee across all departments.":`Your team — ${myDept} department only.`}
       </div>
 
-      <div className="card" style={{padding:0,overflow:"hidden"}}>
-        {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
-        employees.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No employees yet</div>:
-        employees.map((emp,i)=>(
-          <div key={emp.id} style={{display:"flex",alignItems:"center",gap:14,padding:16,borderBottom:i<employees.length-1?"1px solid #181828":"none"}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:14}}>{emp.name||"Unnamed"}</div>
-              <div style={{fontSize:11,color:"#666688"}}>{emp.email} · {emp.role?.name||"No role"}</div>
-            </div>
-            <span style={{fontSize:10,fontWeight:800,padding:"3px 10px",borderRadius:20,background:emp.employee_status==="ACTIVE"?"rgba(0,200,83,.12)":"rgba(248,113,113,.12)",color:emp.employee_status==="ACTIVE"?GR:"#f87171"}}>{emp.employee_status}</span>
-            {emp.employee_status==="ACTIVE"
-              ?<button onClick={()=>disable(emp.id)} style={{background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Disable</button>
-              :<button onClick={()=>reactivate(emp.id)} style={{background:"rgba(0,200,83,.1)",border:"1px solid rgba(0,200,83,.3)",color:GR,borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Reactivate</button>}
+      {/* One-time credentials modal — shown right after creating or resetting */}
+      {credModal&&(
+        <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+          onClick={()=>setCredModal(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#111120",border:"2px solid #e50914",borderRadius:16,padding:28,maxWidth:420,width:"100%"}}>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:6}}>⚠️ Save these credentials now</div>
+            <div style={{fontSize:12,color:"#f59e0b",marginBottom:18}}>This password will NOT be shown again. Copy it and give it to {credModal.name} directly — never over an insecure channel.</div>
+            {!credModal.resetOnly&&<>
+              <div style={{fontSize:11,color:"#666688",marginBottom:2}}>Email</div>
+              <div style={{fontFamily:"monospace",fontSize:14,background:"#0a0a14",padding:"8px 12px",borderRadius:8,marginBottom:12}}>{credModal.email}</div>
+              <div style={{fontSize:11,color:"#666688",marginBottom:2}}>Employee ID</div>
+              <div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:"#e50914",background:"#0a0a14",padding:"8px 12px",borderRadius:8,marginBottom:12}}>{credModal.employeeId}</div>
+            </>}
+            <div style={{fontSize:11,color:"#666688",marginBottom:2}}>Password</div>
+            <div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,background:"#0a0a14",padding:"8px 12px",borderRadius:8,marginBottom:20}}>{credModal.password}</div>
+            <button onClick={()=>setCredModal(null)} style={{width:"100%",background:"#e50914",border:"none",color:"#fff",borderRadius:8,padding:"11px",fontWeight:700,cursor:"pointer"}}>I've saved it — close</button>
           </div>
-        ))}
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:8,marginBottom:18}}>
+        <button onClick={()=>setTab("team")} style={{background:tab==="team"?"#e50914":"rgba(255,255,255,.06)",border:"none",color:"#fff",borderRadius:8,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Team</button>
+        <button onClick={()=>setTab("activity")} style={{background:tab==="activity"?"#e50914":"rgba(255,255,255,.06)",border:"none",color:"#fff",borderRadius:8,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Login Activity</button>
       </div>
+
+      {tab==="team"&&<>
+        {creatableRoles.length>0&&(
+          <div className="card" style={{padding:20,marginBottom:20}}>
+            <div style={{fontSize:12,color:"#3a3a5a",fontWeight:700,textTransform:"uppercase",letterSpacing:.7,marginBottom:14}}>Add Team Member</div>
+            <div style={{fontSize:11,color:"#666688",marginBottom:12}}>A brand-new account is created with a generated Employee ID and password — the person does NOT need to have signed up already.</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Full name" style={{flex:1,minWidth:150,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
+              <input value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email" type="email" style={{flex:1,minWidth:180,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
+              <select value={newRole} onChange={e=>setNewRole(e.target.value)} style={{flex:1,minWidth:180,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}>
+                {creatableRoles.map(r=><option key={r.name} value={r.name}>{r.name.replace(/_/g," ")}</option>)}
+              </select>
+              <button onClick={createEmployee} disabled={creating} style={{background:R,border:"none",color:"#fff",borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>{creating?"Creating...":"Add"}</button>
+            </div>
+          </div>
+        )}
+
+        <div className="card" style={{padding:0,overflow:"hidden"}}>
+          {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
+          employees.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No employees yet</div>:
+          employees.map((emp,i)=>(
+            <div key={emp.id} style={{display:"flex",alignItems:"center",gap:14,padding:16,borderBottom:i<employees.length-1?"1px solid #181828":"none",flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:180}}>
+                <div style={{fontWeight:700,fontSize:14}}>{emp.name||"Unnamed"}</div>
+                <div style={{fontSize:11,color:"#666688"}}>{emp.email} · {emp.employee_id} · {emp.role?.name}</div>
+                <div style={{fontSize:10,color:"#3a3a5a",marginTop:2}}>Last login: {emp.last_login_at?new Date(emp.last_login_at).toLocaleString():"Never"}</div>
+              </div>
+              <span style={{fontSize:10,fontWeight:800,padding:"3px 10px",borderRadius:20,background:emp.employee_status==="ACTIVE"?"rgba(0,200,83,.12)":"rgba(248,113,113,.12)",color:emp.employee_status==="ACTIVE"?GR:"#f87171"}}>{emp.employee_status}</span>
+              <button onClick={()=>resetPassword(emp.id,emp.name)} style={{background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.3)",color:PU,borderRadius:7,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Reset PW</button>
+              {emp.employee_status==="ACTIVE"
+                ?<button onClick={()=>disable(emp.id)} style={{background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Disable</button>
+                :<button onClick={()=>reactivate(emp.id)} style={{background:"rgba(0,200,83,.1)",border:"1px solid rgba(0,200,83,.3)",color:GR,borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Reactivate</button>}
+            </div>
+          ))}
+        </div>
+      </>}
+
+      {tab==="activity"&&<LoginActivityPage/>}
     </div>
   );
 }
 
-// ── APPROVALS PAGE ────────────────────────────────────────
+function LoginActivityPage(){
+  const[events,setEvents]=useState([]);
+  const[loading,setLoading]=useState(true);
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const res=await fetch(`${API}/api/employees/login-activity`,{headers:{Authorization:`Bearer ${localStorage.getItem("streamx_token")}`}});
+        const json=await res.json();
+        setEvents(json.success?json.data:[]);
+      }catch(e){setEvents([]);}
+      setLoading(false);
+    })();
+  },[]);
+  return(
+    <div className="card" style={{padding:0,overflow:"hidden",maxHeight:500,overflowY:"auto"}}>
+      {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
+      events.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No login activity yet</div>:
+      events.map(ev=>(
+        <div key={ev.id} style={{padding:"12px 18px",borderBottom:"1px solid #181828",fontSize:12,display:"flex",justifyContent:"space-between"}}>
+          <div>
+            <span style={{fontWeight:700,color:ev.event_type==="LOGIN"?GR:ev.event_type.includes("BLOCKED")||ev.event_type.includes("FAILED")?"#f87171":"#aaa"}}>{ev.event_type}</span>
+            <span style={{color:"#666688"}}> · {ev.user?.name||"Unknown"} ({ev.user?.employee_id})</span>
+          </div>
+          <div style={{color:"#3a3a5a"}}>{new Date(ev.created_at).toLocaleString()}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ApprovalsPage({showToast}){
   const[requests,setRequests]=useState([]);
   const[loading,setLoading]=useState(true);
@@ -1276,6 +1402,81 @@ function AuditLogsPage(){
             <span style={{color:"#666688"}}> · {log.user_name||log.user_id||"system"} ({log.role||"—"})</span>
             {log.resource_type&&<span style={{color:"#666688"}}> · {log.resource_type}:{log.resource_id}</span>}
             <div style={{color:"#3a3a5a",fontSize:10,marginTop:2}}>{new Date(log.created_at).toLocaleString()}{log.reason?` · ${log.reason}`:""}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── SUPPORT TICKETS PAGE ──────────────────────────────────
+function SupportTicketsPage({showToast}){
+  const[tickets,setTickets]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[filter,setFilter]=useState("OPEN");
+
+  const authHeader=()=>({Authorization:`Bearer ${localStorage.getItem("streamx_token")}`});
+
+  async function load(){
+    setLoading(true);
+    try{
+      const res=await fetch(`${API}/api/support-tickets?status=${filter}`,{headers:authHeader()});
+      const json=await res.json();
+      setTickets(json.success?json.data:[]);
+    }catch(e){setTickets([]);}
+    setLoading(false);
+  }
+  useEffect(()=>{load();},[filter]);
+
+  async function assignToMe(id){
+    try{
+      const meRes=await fetch(`${API}/api/employees/me`,{headers:authHeader()});
+      const me=(await meRes.json()).data;
+      const token=localStorage.getItem("streamx_token");
+      const payload=JSON.parse(atob(token.split(".")[1]));
+      const res=await fetch(`${API}/api/support-tickets/${id}/assign`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({assignTo:payload.id})});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Ticket assigned to you");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
+  async function resolve(id){
+    const note=prompt("Resolution note (optional):")||"";
+    try{
+      const res=await fetch(`${API}/api/support-tickets/${id}/resolve`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({resolutionNote:note})});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Ticket resolved");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
+  return(
+    <div style={{animation:"fadeIn .3s ease",maxWidth:800}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:18}}>Support Tickets</div>
+      <div style={{display:"flex",gap:8,marginBottom:18}}>
+        {["OPEN","IN_PROGRESS","RESOLVED","CLOSED"].map(s=>(
+          <button key={s} onClick={()=>setFilter(s)} style={{background:filter===s?R:"rgba(255,255,255,.06)",border:"none",color:"#fff",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{s.replace("_"," ")}</button>
+        ))}
+      </div>
+      <div className="card" style={{padding:0,overflow:"hidden"}}>
+        {loading?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>Loading...</div>:
+        tickets.length===0?<div style={{padding:24,textAlign:"center",color:"#3a3a5a"}}>No {filter.toLowerCase().replace("_"," ")} tickets</div>:
+        tickets.map((tk,i)=>(
+          <div key={tk.id} style={{padding:18,borderBottom:i<tickets.length-1?"1px solid #181828":"none"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{fontWeight:800,fontSize:14}}>{tk.subject}</div>
+              <span style={{fontSize:10,fontWeight:800,padding:"3px 10px",borderRadius:20,background:"rgba(245,158,11,.12)",color:AM}}>{tk.priority}</span>
+            </div>
+            <div style={{fontSize:12,color:"#8888aa",marginBottom:6}}>{tk.message}</div>
+            <div style={{fontSize:11,color:"#666688",marginBottom:10}}>From: {tk.customer_email} · {new Date(tk.created_at).toLocaleString()}</div>
+            {tk.status!=="RESOLVED"&&tk.status!=="CLOSED"&&(
+              <div style={{display:"flex",gap:8}}>
+                {!tk.assigned_to&&<button onClick={()=>assignToMe(tk.id)} style={{background:BL,border:"none",color:"#fff",borderRadius:7,padding:"7px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Assign to me</button>}
+                <button onClick={()=>resolve(tk.id)} style={{background:GR,border:"none",color:"#04040e",borderRadius:7,padding:"7px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Mark Resolved</button>
+              </div>
+            )}
+            {tk.resolution_note&&<div style={{fontSize:11,color:"#666688",marginTop:8}}>Resolution: {tk.resolution_note}</div>}
           </div>
         ))}
       </div>
@@ -1567,6 +1768,7 @@ export default function Admin({onNavigate,user,employeeRole}){
           {page==="ads"       &&<AdsPage ads={ads} onRefresh={loadData} showToast={showToast}/>}
           {page==="revenue"   &&<RevenuePage stats={stats} users={users}/>}
           {page==="employees" &&<EmployeesPage showToast={showToast}/>}
+          {page==="tickets"   &&<SupportTicketsPage showToast={showToast}/>}
           {page==="approvals" &&<ApprovalsPage showToast={showToast}/>}
           {page==="auditlogs" &&<AuditLogsPage/>}
 
