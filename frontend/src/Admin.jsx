@@ -767,6 +767,7 @@ function ContentList({content,isLiveList=false,onRefresh,showToast}){
                       </div>
                     </td>
                     <td style={{color:BL,fontSize:13,fontWeight:700}}>{fN(c.views||0)}</td>
+                    <td style={{color:R,fontSize:13,fontWeight:700}}>{fN(c.likes_count||0)}</td>
                     <td>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                         <Btn onClick={()=>setModal(c)} variant="outline" color={BL} size="sm">Edit</Btn>
@@ -861,6 +862,7 @@ function AnalyticsPage({stats,content,users}){
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:14,marginBottom:28}}>
         {[
           ["👁️","Total Views",    fN(stats.totalViews||0),  "#a855f7"],
+          ["♥️","Total Likes",    fN((content||[]).reduce((s,c)=>s+(c.likes_count||0),0)), R],
           ["👥","Total Users",    fN(stats.totalUsers||0),  BL],
           ["🎬","Movies",         (content||[]).filter(c=>c.type==="Movie").length, R],
           ["📺","Web Series",     (content||[]).filter(c=>c.type==="Web Series").length, AM],
@@ -1141,6 +1143,7 @@ function EmployeesPage({showToast}){
   const[loading,setLoading]=useState(true);
   const[newName,setNewName]=useState("");
   const[newEmail,setNewEmail]=useState("");
+  const[newPhone,setNewPhone]=useState("");
   const[newRole,setNewRole]=useState("");
   const[myDept,setMyDept]=useState(null);
   const[myTier,setMyTier]=useState(null);
@@ -1195,13 +1198,14 @@ function EmployeesPage({showToast}){
 
   async function createEmployee(){
     if(!newName.trim()||!newEmail.trim())return showToast("Enter name and email","err");
+    if(newPhone.trim()&&newPhone.replace(/\D/g,"").length!==10)return showToast("Mobile number must be 10 digits","err");
     setCreating(true);
     try{
-      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({name:newName.trim(),email:newEmail.trim(),roleName:newRole})});
+      const res=await fetch(`${API}/api/employees`,{method:"POST",headers:{...authHeader(),"Content-Type":"application/json"},body:JSON.stringify({name:newName.trim(),email:newEmail.trim(),phone:newPhone.trim(),roleName:newRole})});
       const json=await res.json();
       if(!json.success)throw new Error(json.msg);
       setCredModal({employeeId:json.data.employeeId,password:json.data.password,email:json.data.email,name:json.data.name});
-      setNewName("");setNewEmail("");
+      setNewName("");setNewEmail("");setNewPhone("");
       load();
     }catch(e){showToast("Failed: "+e.message,"err");}
     setCreating(false);
@@ -1278,6 +1282,7 @@ function EmployeesPage({showToast}){
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Full name" style={{flex:1,minWidth:150,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
               <input value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email" type="email" style={{flex:1,minWidth:180,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
+              <input value={newPhone} onChange={e=>setNewPhone(e.target.value.replace(/\D/g,"").slice(0,10))} placeholder="Mobile (optional)" type="tel" maxLength={10} style={{flex:1,minWidth:140,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}/>
               <select value={newRole} onChange={e=>setNewRole(e.target.value)} style={{flex:1,minWidth:180,background:"#0a0a14",border:"1.5px solid #1a1a2c",borderRadius:8,color:"#fff",padding:"10px 14px",fontSize:13}}>
                 {creatableRoles.map(r=><option key={r.name} value={r.name}>{r.name.replace(/_/g," ")}</option>)}
               </select>
@@ -1293,7 +1298,7 @@ function EmployeesPage({showToast}){
             <div key={emp.id} style={{display:"flex",alignItems:"center",gap:14,padding:16,borderBottom:i<employees.length-1?"1px solid #181828":"none",flexWrap:"wrap"}}>
               <div style={{flex:1,minWidth:180}}>
                 <div style={{fontWeight:700,fontSize:14}}>{emp.name||"Unnamed"}</div>
-                <div style={{fontSize:11,color:"#666688"}}>{emp.email} · {emp.employee_id} · {emp.role?.name}</div>
+                <div style={{fontSize:11,color:"#666688"}}>{emp.email}{emp.phone?` · ${emp.phone}`:""} · {emp.employee_id} · {emp.role?.name}</div>
                 <div style={{fontSize:10,color:"#3a3a5a",marginTop:2}}>Last login: {emp.last_login_at?new Date(emp.last_login_at).toLocaleString():"Never"}</div>
               </div>
               <span style={{fontSize:10,fontWeight:800,padding:"3px 10px",borderRadius:20,background:emp.employee_status==="ACTIVE"?"rgba(0,200,83,.12)":"rgba(248,113,113,.12)",color:emp.employee_status==="ACTIVE"?GR:"#f87171"}}>{emp.employee_status}</span>

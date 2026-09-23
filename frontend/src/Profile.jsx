@@ -31,6 +31,9 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
   const[newName,setNewName]=useState(user?.name||"");
   const[editEmail,setEditEmail]=useState(false);
   const[newEmail,setNewEmail]=useState(user?.email||"");
+  const[editPhone,setEditPhone]=useState(false);
+  const[newPhone,setNewPhone]=useState((user?.phone||"").replace(/^\+91/,""));
+  const[savingPhone,setSavingPhone]=useState(false);
   const[savingName,setSavingName]=useState(false);
   const[savingEmail,setSavingEmail]=useState(false);
   const[prefs,setPrefs]=useState({autoplay:true,skipIntro:true,notifications:true,emailAlerts:false});
@@ -87,6 +90,28 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
     try{const u=await db.updateUser(user.id,{email:newEmail.trim()});setUserData(u||{...userData,email:newEmail.trim()});localStorage.setItem("streamx_user",JSON.stringify(u||userData));const np={...prefs,emailAlerts:true};setPrefs(np);savePrefs(np);showToast("Email saved ✓");setEditEmail(false);}
     catch(e){showToast("Failed","err");}
     setSavingEmail(false);
+  }
+
+  async function savePhone(){
+    if(!user?.id)return;
+    const digits=newPhone.replace(/\D/g,"");
+    if(!digits){
+      setSavingPhone(true);
+      try{await db.updateUser(user.id,{phone:""});setUserData(u=>({...u,phone:""}));localStorage.setItem("streamx_user",JSON.stringify({...userData,phone:""}));showToast("Mobile number removed");setEditPhone(false);}
+      catch(e){showToast("Failed","err");}
+      setSavingPhone(false);return;
+    }
+    if(digits.length!==10){showToast("Enter a valid 10-digit mobile number","err");return;}
+    const full="+91"+digits;
+    setSavingPhone(true);
+    try{
+      const existing=await supabase.from("users").select("id,email").eq("phone",full).maybeSingle();
+      if(existing.data&&existing.data.id!==user.id){showToast(`Number already used by ${existing.data.email||"another account"}`,"err");setSavingPhone(false);return;}
+      const u=await db.updateUser(user.id,{phone:full});
+      setUserData(u||{...userData,phone:full});localStorage.setItem("streamx_user",JSON.stringify(u||{...userData,phone:full}));
+      showToast("Mobile number saved ✓");setEditPhone(false);
+    }catch(e){showToast("Failed","err");}
+    setSavingPhone(false);
   }
 
   function savePrefs(p){if(!user?.id)return;localStorage.setItem("streamx_prefs_"+user.id,JSON.stringify(p));}
@@ -260,10 +285,23 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
                 </div>
               </Card>
             )}
+            {editPhone&&(
+              <Card>
+                <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Edit Mobile Number</div>
+                <div style={{display:"flex",gap:8}}>
+                  <div style={{background:"#0f0f18",border:"1.5px solid #1e1e2e",borderRadius:10,color:"#888",fontSize:15,display:"flex",alignItems:"center",padding:"0 12px",fontWeight:700}}>🇮🇳 +91</div>
+                  <input className="inp" style={{flex:1}} value={newPhone} onChange={e=>setNewPhone(e.target.value.replace(/\D/g,"").slice(0,10))} placeholder="10-digit number" type="tel" maxLength={10} autoFocus onKeyDown={e=>{if(e.key==="Enter")savePhone();if(e.key==="Escape")setEditPhone(false);}}/>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  <button onClick={()=>setEditPhone(false)} style={{flex:1,background:"rgba(255,255,255,.06)",border:`1px solid ${BD}`,color:"#aaa",borderRadius:8,padding:"9px",fontSize:13,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>Cancel</button>
+                  <button onClick={savePhone} disabled={savingPhone} style={{flex:2,background:RED,border:"none",color:"#fff",borderRadius:8,padding:"9px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>{savingPhone?"Saving...":"Save Mobile Number"}</button>
+                </div>
+              </Card>
+            )}
             <Card>
               <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("personal_info",appLang)}</div>
               <Row label={t("full_name",appLang)} sub={userData?.name||"Not set"} onClick={()=>{setEditName(true);setNewName(userData?.name||"");}}/>
-              <Row label={t("mobile_number",appLang)} sub={userData?.phone||"Not set"}/>
+              <Row label={t("mobile_number",appLang)} sub={userData?.phone||"Not set"} onClick={()=>{setEditPhone(true);setNewPhone((userData?.phone||"").replace(/^\+91/,""));}}/>
               <Row label={t("email_address",appLang)} sub={userData?.email||"Not added"} last/>
             </Card>
           </div>
