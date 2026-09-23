@@ -737,7 +737,7 @@ function ContentList({content,isLiveList=false,onRefresh,showToast}){
         ):(
           <div style={{overflowX:"auto"}}>
             <table className="tbl">
-              <thead><tr><th>Content</th><th>Type</th><th>Status</th><th>Views</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Content</th><th>Type</th><th>Status</th><th>Views</th><th>Likes</th><th>Actions</th></tr></thead>
               <tbody>
                 {items.map(c=>(
                   <tr key={c.id}>
@@ -796,23 +796,51 @@ function AnalyticsPage({stats,content,users}){
   const top=[...(content||[])].sort((a,b)=>(b.views||0)-(a.views||0));
   const totalV=top.reduce((s,c)=>s+(c.views||0),0);
 
-  // Mock weekly data for charts (in real app, fetch from DB)
-  const weeklyViews=[
-    {label:"Mon",value:Math.floor(Math.random()*50000+10000)},
-    {label:"Tue",value:Math.floor(Math.random()*50000+10000)},
-    {label:"Wed",value:Math.floor(Math.random()*60000+15000)},
-    {label:"Thu",value:Math.floor(Math.random()*55000+12000)},
-    {label:"Fri",value:Math.floor(Math.random()*70000+20000)},
-    {label:"Sat",value:Math.floor(Math.random()*90000+30000)},
-    {label:"Sun",value:Math.floor(Math.random()*85000+25000)},
-  ];
+  // Real weekly watch activity — counts actual watch_history rows touched
+  // in the last 7 days, grouped by day. (watch_history is upserted per
+  // user+content, so this reflects distinct watch sessions per day, not
+  // a raw play-event log — still real data, never randomized.)
+  const[weeklyViews,setWeeklyViews]=useState(null); // null = loading
+  useEffect(()=>{
+    let cancelled=false;
+    const DAY_LABELS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    (async()=>{
+      const since=new Date(); since.setDate(since.getDate()-6); since.setHours(0,0,0,0);
+      const{data,error}=await supabase.from("watch_history").select("watched_at").gte("watched_at",since.toISOString());
+      if(cancelled)return;
+      if(error){setWeeklyViews([]);return;}
+      const buckets={};
+      for(let i=0;i<7;i++){
+        const d=new Date(since); d.setDate(d.getDate()+i);
+        buckets[d.toDateString()]={label:DAY_LABELS[d.getDay()],value:0};
+      }
+      (data||[]).forEach(r=>{
+        const key=new Date(r.watched_at).toDateString();
+        if(buckets[key])buckets[key].value++;
+      });
+      setWeeklyViews(Object.values(buckets));
+    })();
+    return()=>{cancelled=true;};
+  },[]);
 
-  const monthlyUsers=[
-    {label:"Jan",value:120},{label:"Feb",value:180},{label:"Mar",value:250},
-    {label:"Apr",value:310},{label:"May",value:420},{label:"Jun",value:580},
-    {label:"Jul",value:720},{label:"Aug",value:890},{label:"Sep",value:1050},
-    {label:"Oct",value:1300},{label:"Nov",value:1550},{label:"Dec",value:1900},
-  ];
+  // Real monthly user growth — actual signups grouped by month, from the
+  // same users list already loaded for the rest of the dashboard.
+  const monthlyUsers=(()=>{
+    const now=new Date();
+    const months=[];
+    for(let i=11;i>=0;i--){
+      const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      months.push({key:`${d.getFullYear()}-${d.getMonth()}`,label:d.toLocaleString("en-IN",{month:"short"}),value:0});
+    }
+    (users||[]).forEach(u=>{
+      if(!u.created_at)return;
+      const d=new Date(u.created_at);
+      const key=`${d.getFullYear()}-${d.getMonth()}`;
+      const m=months.find(mo=>mo.key===key);
+      if(m)m.value++;
+    });
+    return months;
+  })();
 
   // Genre breakdown
   const genreMap={};
@@ -851,12 +879,15 @@ function AnalyticsPage({stats,content,users}){
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:18}}>
-        {/* Weekly Views Bar Chart */}
+        {/* Weekly Watch Activity — real watch_history rows, last 7 days */}
         <div className="card" style={{padding:24}}>
-          <BarChart data={weeklyViews} height={180} color={R} title="📊 Weekly Views (This Week)"/>
+          {weeklyViews===null
+            ?<div style={{textAlign:"center",color:"#3a3a5a",padding:"40px 0",fontSize:12}}>Loading real activity…</div>
+            :<BarChart data={weeklyViews} height={180} color={R} title="📊 Watch Activity (Last 7 Days)"/>
+          }
         </div>
 
-        {/* Monthly Users Line Chart */}
+        {/* Monthly Users Line Chart — real signups from users.created_at */}
         <div className="card" style={{padding:24}}>
           <LineChart data={monthlyUsers} height={180} color={BL} title="📈 User Growth (Monthly)"/>
         </div>

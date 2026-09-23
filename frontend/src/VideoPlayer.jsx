@@ -151,6 +151,37 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     setSubtitleUrl(content?.subtitle_url || null);
   }, [content?.id]);
 
+  // ── Real view count — increments exactly once per time this title is
+  // opened (not per render, not randomized). Replaces the old dead
+  // backend increment that the frontend never actually called. ──
+  useEffect(() => {
+    if (!content?.id) return;
+    db.incrementViews(content.id);
+  }, [content?.id]);
+
+  // ── Real likes — reflects an actual per-user like, toggleable, backed
+  // by the content_likes table (see supabase_migration_likes_views.sql) ──
+  const [liked, setLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(content?.likes_count || 0);
+  const [likeBusy, setLikeBusy] = useState(false);
+  useEffect(() => {
+    if (!content?.id) return;
+    setLikesCount(content?.likes_count || 0);
+    if (user?.id) db.hasLiked(content.id, user.id).then(setLiked);
+    else setLiked(false);
+  }, [content?.id, user?.id]);
+
+  async function handleToggleLike() {
+    if (!content?.id || likeBusy) return;
+    if (!user?.id) return; // must be logged in — button below is hidden/disabled in that case
+    setLikeBusy(true);
+    try {
+      const result = await db.toggleLike(content.id, user.id);
+      if (result) { setLiked(result.liked); setLikesCount(result.likes_count); }
+    } catch (e) { console.error("toggleLike failed:", e.message); }
+    setLikeBusy(false);
+  }
+
   // Actually turn subtitle track on/off in the browser when toggled
   useEffect(() => {
     const v = videoRef.current;
@@ -575,7 +606,19 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
                   {isLive && <span style={{ color:"#e50914", fontWeight:700, marginLeft:8, animation:"vp-pulse 1.5s infinite" }}>● LIVE</span>}
                 </div>
               </div>
-              <div style={{ display:"flex", gap:4 }}>
+              <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                {!isLive && user?.id && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleToggleLike(); }}
+                    disabled={likeBusy}
+                    className="vp-ibtn"
+                    style={{ fontSize:16, display:"flex", alignItems:"center", gap:5, opacity: likeBusy ? 0.6 : 1 }}
+                    title={liked ? "Unlike" : "Like"}
+                  >
+                    <span style={{ fontSize:17, color: liked ? "#e50914" : "#fff" }}>{liked ? "♥" : "♡"}</span>
+                    <span style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,.75)" }}>{likesCount > 999 ? (likesCount/1000).toFixed(1)+"k" : likesCount}</span>
+                  </button>
+                )}
                 {document.pictureInPictureEnabled && !isMobile && (
                   <button onClick={(e) => { e.stopPropagation(); togglePiP(); }} className="vp-ibtn" style={{ fontSize:17 }}>⧉</button>
                 )}
