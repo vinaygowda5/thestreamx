@@ -69,6 +69,7 @@ app.use("/api", apiLimiter);
 app.use("/api/auth/send-otp",   otpLimiter);
 app.use("/api/auth/verify-otp", loginLimiter);
 app.use("/api/admin",           adminLimiter);
+app.use("/api/employee-auth/login", loginLimiter);
 
 // ── All Routes ──
 app.use("/api/auth",          require("./src/routes/auth"));
@@ -83,6 +84,8 @@ app.use("/api/analytics",     require("./src/routes/analytics"));
 app.use("/api/approvals",     require("./src/routes/approvals"));
 app.use("/api/employees",     require("./src/routes/employees"));
 app.use("/api/audit-logs",    require("./src/routes/auditlogs"));
+app.use("/api/employee-auth", require("./src/routes/employeeAuth"));
+app.use("/api/support-tickets", require("./src/routes/supportTickets"));
 
 app.get("/", (req,res) => res.json({
   status: "✅ StreamX Backend Running",

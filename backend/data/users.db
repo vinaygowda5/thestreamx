@@ -1,2 +1,0 @@
-{"_id":"admin1","name":"StreamX Admin","email":"admin@streamx.in","password":"Admin@1234","role":"admin","plan":"Premium","isActive":true,"createdAt":{"$$date":1779358988638}}
-{"_id":"u1","name":"Rahul Sharma","email":"demo@streamx.in","password":"Demo@1234","role":"user","plan":"Premium","isActive":true,"createdAt":{"$$date":1779358988638}}

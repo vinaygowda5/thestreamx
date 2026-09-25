@@ -6,7 +6,7 @@ const { logAudit } = require("./audit");
 // Cheap enough for now; can be cached later if it becomes a bottleneck.
 async function loadEmployeeContext(userId) {
   const { data: user } = await sb.from("users")
-    .select("id, employee_role_id, employee_status, role, name")
+    .select("id, employee_role_id, employee_status, role, name, managed_by")
     .eq("id", userId).single();
   if (!user) return null;
 
@@ -14,15 +14,15 @@ async function loadEmployeeContext(userId) {
   // SUPER_ADMIN even before they're migrated to the new roles table.
   // This is what keeps your current admin login working unchanged.
   if (!user.employee_role_id && user.role === "admin") {
-    return { userId, roleName: "SUPER_ADMIN", status: "ACTIVE", permissions: new Set(["*"]) };
+    return { userId, roleName: "SUPER_ADMIN", department: "ALL", tier: "SUPER", managedBy: null, status: "ACTIVE", permissions: new Set(["*"]) };
   }
   if (!user.employee_role_id) return null; // not an employee at all
 
   if (user.employee_status && user.employee_status !== "ACTIVE") {
-    return { userId, roleName: null, status: user.employee_status, permissions: new Set() };
+    return { userId, roleName: null, department: null, tier: null, managedBy: null, status: user.employee_status, permissions: new Set() };
   }
 
-  const { data: role } = await sb.from("roles").select("id, name").eq("id", user.employee_role_id).single();
+  const { data: role } = await sb.from("roles").select("id, name, department, tier").eq("id", user.employee_role_id).single();
   const { data: rolePerms } = await sb.from("role_permissions")
     .select("permissions(key)").eq("role_id", user.employee_role_id);
   const { data: extraPerms } = await sb.from("employee_permissions")
@@ -33,7 +33,10 @@ async function loadEmployeeContext(userId) {
     ...(extraPerms || []).map(r => r.permissions?.key).filter(Boolean),
   ]);
 
-  return { userId, roleName: role?.name || null, status: "ACTIVE", permissions };
+  return {
+    userId, roleName: role?.name || null, department: role?.department || null,
+    tier: role?.tier || null, managedBy: user.managed_by || null, status: "ACTIVE", permissions,
+  };
 }
 
 // authorize("content.delete") — use as middleware after requireAuth.
