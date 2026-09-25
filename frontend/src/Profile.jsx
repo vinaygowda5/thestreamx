@@ -77,21 +77,6 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
     setSavingName(false);
   }
 
-  async function saveEmail(){
-    if(!user?.id)return;
-    if(!newEmail.trim()){
-      setPrefs(p=>({...p,emailAlerts:false}));savePrefs({...prefs,emailAlerts:false});
-      try{await db.updateUser(user.id,{email:""});}catch(e){}
-      setUserData(u=>({...u,email:""}));localStorage.setItem("streamx_user",JSON.stringify({...userData,email:""}));
-      showToast("Email removed");setEditEmail(false);return;
-    }
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())){showToast("Enter a valid email","err");return;}
-    setSavingEmail(true);
-    try{const u=await db.updateUser(user.id,{email:newEmail.trim()});setUserData(u||{...userData,email:newEmail.trim()});localStorage.setItem("streamx_user",JSON.stringify(u||userData));const np={...prefs,emailAlerts:true};setPrefs(np);savePrefs(np);showToast("Email saved ✓");setEditEmail(false);}
-    catch(e){showToast("Failed","err");}
-    setSavingEmail(false);
-  }
-
   async function savePhone(){
     if(!user?.id)return;
     const digits=newPhone.replace(/\D/g,"");

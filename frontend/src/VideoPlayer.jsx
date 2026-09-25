@@ -151,16 +151,11 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     setSubtitleUrl(content?.subtitle_url || null);
   }, [content?.id]);
 
-  // ── Real view count — increments exactly once per time this title is
-  // opened (not per render, not randomized). Replaces the old dead
-  // backend increment that the frontend never actually called. ──
   useEffect(() => {
     if (!content?.id) return;
     db.incrementViews(content.id);
   }, [content?.id]);
 
-  // ── Real likes — reflects an actual per-user like, toggleable, backed
-  // by the content_likes table (see supabase_migration_likes_views.sql) ──
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(content?.likes_count || 0);
   const [likeBusy, setLikeBusy] = useState(false);
@@ -173,7 +168,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
 
   async function handleToggleLike() {
     if (!content?.id || likeBusy) return;
-    if (!user?.id) return; // must be logged in — button below is hidden/disabled in that case
+    if (!user?.id) return;
     setLikeBusy(true);
     try {
       const result = await db.toggleLike(content.id, user.id);

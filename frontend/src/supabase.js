@@ -79,7 +79,7 @@ export const db = {
     return data;
   },
 
-  // ✅ REAL DELETE — permanently removes from database
+    // ✅ REAL DELETE — permanently removes from database
   async deleteContent(id) {
     const { error } = await supabase.from("content").delete().eq("id", id);
     if (error) throw error;
@@ -90,8 +90,6 @@ export const db = {
      Requires the SQL migration (increment_content_views / toggle_content_like
      RPC functions + content_likes table) to be run in Supabase first. */
   async incrementViews(contentId) {
-    // Atomic server-side increment — avoids the read-then-write race that
-    // a plain `.update({views: views+1})` from the client would have.
     const { error } = await supabase.rpc("increment_content_views", { p_content_id: contentId });
     if (error) console.error("incrementViews failed:", error.message);
   },
@@ -99,7 +97,6 @@ export const db = {
     if (!userId) throw new Error("Must be logged in to like");
     const { data, error } = await supabase.rpc("toggle_content_like", { p_content_id: contentId, p_user_id: userId });
     if (error) throw error;
-    // Supabase returns an array for table-returning RPC functions
     return Array.isArray(data) ? data[0] : data;
   },
   async hasLiked(contentId, userId) {
