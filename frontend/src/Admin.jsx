@@ -85,20 +85,23 @@ const PAGES=[
 // everything; other roles see only what the spec says they should.
 // Frontend filtering is UX only — the backend's requireSuperAdmin()/
 // authorize() checks are the actual security boundary regardless of this.
+// Note: "settings" is deliberately absent from every role here — only
+// SUPER_ADMIN (or the legacy admin flag) gets it, via visiblePages() below.
+// Employees sign out from the sidebar's "Sign Out" button instead.
 const ROLE_PAGES = {
-  CONTENT_MANAGER:      ["dashboard","content","employees","settings"],
-  CONTENT_TEAM_LEADER:  ["dashboard","content","employees","settings"],
-  CONTENT_TEAM_MEMBER:  ["dashboard","content","settings"],
-  LIVE_MANAGER:         ["dashboard","live","employees","settings"],
-  LIVE_TEAM_LEADER:     ["dashboard","live","employees","settings"],
-  LIVE_TEAM_MEMBER:     ["dashboard","live","settings"],
-  SUPPORT_MANAGER:      ["dashboard","users","tickets","employees","settings"],
-  SUPPORT_TEAM_LEADER:  ["dashboard","users","tickets","employees","settings"],
-  SUPPORT_TEAM_MEMBER:  ["dashboard","tickets","settings"],
-  FINANCE_MANAGER:      ["dashboard","revenue","employees","settings"],
-  FINANCE_TEAM_LEADER:  ["dashboard","revenue","employees","settings"],
-  FINANCE_TEAM_MEMBER:  ["dashboard","revenue","settings"],
-  ANALYST:              ["dashboard","analytics","settings"],
+  CONTENT_MANAGER:      ["dashboard","content","employees"],
+  CONTENT_TEAM_LEADER:  ["dashboard","content","employees"],
+  CONTENT_TEAM_MEMBER:  ["dashboard","content"],
+  LIVE_MANAGER:         ["dashboard","live","employees"],
+  LIVE_TEAM_LEADER:     ["dashboard","live","employees"],
+  LIVE_TEAM_MEMBER:     ["dashboard","live"],
+  SUPPORT_MANAGER:      ["dashboard","users","tickets","employees"],
+  SUPPORT_TEAM_LEADER:  ["dashboard","users","tickets","employees"],
+  SUPPORT_TEAM_MEMBER:  ["dashboard","tickets"],
+  FINANCE_MANAGER:      ["dashboard","revenue","employees"],
+  FINANCE_TEAM_LEADER:  ["dashboard","revenue","employees"],
+  FINANCE_TEAM_MEMBER:  ["dashboard","revenue"],
+  ANALYST:              ["dashboard","analytics"],
 };
 function visiblePages(employeeRole, legacyIsAdmin){
   if(legacyIsAdmin || employeeRole==="SUPER_ADMIN" || !employeeRole) return PAGES;
@@ -114,6 +117,18 @@ const RATINGS=["U","U/A","U/A 7+","U/A 13+","U/A 16+","A"];
 
 const fN=n=>n>=1e7?(n/1e7).toFixed(1)+"Cr":n>=1e5?(n/1e5).toFixed(1)+"L":n>=1e3?(n/1e3).toFixed(1)+"K":String(n||0);
 const fM=b=>b>=1e9?(b/1e9).toFixed(1)+"GB":b>=1e6?(b/1e6).toFixed(1)+"MB":b>=1e3?(b/1e3).toFixed(0)+"KB":b+"B";
+const authHeader=()=>({Authorization:`Bearer ${localStorage.getItem("streamx_token")}`});
+
+// Which department a role belongs to, for scoping the Dashboard and
+// hiding data that isn't that department's business. null/undefined/
+// SUPER_ADMIN/legacy admin = sees everything (handled by callers).
+const ROLE_DEPT = {
+  CONTENT_MANAGER:"CONTENT", CONTENT_TEAM_LEADER:"CONTENT", CONTENT_TEAM_MEMBER:"CONTENT",
+  LIVE_MANAGER:"LIVE", LIVE_TEAM_LEADER:"LIVE", LIVE_TEAM_MEMBER:"LIVE",
+  SUPPORT_MANAGER:"SUPPORT", SUPPORT_TEAM_LEADER:"SUPPORT", SUPPORT_TEAM_MEMBER:"SUPPORT",
+  FINANCE_MANAGER:"FINANCE", FINANCE_TEAM_LEADER:"FINANCE", FINANCE_TEAM_MEMBER:"FINANCE",
+  ANALYST:"ANALYTICS",
+};
 
 // ── UI Components ─────────────────────────────────────────
 
@@ -1521,32 +1536,41 @@ function SupportTicketsPage({showToast}){
 }
 
 // ── REVENUE PAGE ──────────────────────────────────────────
-function RevenuePage({stats,users}){
-  const premium=(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium");
-  const basic  =(users||[]).filter(u=>u.plan?.includes("basic"));
-  const mobile =(users||[]).filter(u=>u.plan?.includes("mobile"));
-  const free   =(users||[]).filter(u=>!u.plan||u.plan==="free");
-  const monthly=premium.length*499+basic.length*299+mobile.length*149;
-  const annual =premium.length*499*12+basic.length*299*12+mobile.length*149*12;
+const PLAN_COLORS = { plan_premium:R, plan_annual:"#a855f7", plan_basic:PU, plan_mobile:BL, premium:R };
+
+function RevenuePage({revenue,users}){
+  if(revenue===null){
+    return(
+      <div style={{animation:"fadeIn .3s ease",textAlign:"center",padding:"60px 0",color:"#3a3a5a"}}>
+        Loading real revenue data…
+      </div>
+    );
+  }
+
+  const premium=(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium").length;
+  const basic  =(users||[]).filter(u=>u.plan?.includes("basic")).length;
+  const mobile =(users||[]).filter(u=>u.plan?.includes("mobile")).length;
   const total  =(users||[]).length||1;
 
-  const revenueByPlan=[
-    {label:"Premium",value:premium.length*499,color:R},
-    {label:"Basic",  value:basic.length*299,  color:PU},
-    {label:"Mobile", value:mobile.length*149,  color:BL},
-  ];
+  const totalRevenue = revenue.totalRevenue||0;
+  const trend = revenue.lastMonthRevenue>0
+    ? Math.round(((revenue.thisMonthRevenue-revenue.lastMonthRevenue)/revenue.lastMonthRevenue)*100)
+    : null;
 
   return(
     <div style={{animation:"fadeIn .3s ease"}}>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:22}}>Revenue Dashboard</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:4}}>Revenue Dashboard</div>
+      <div style={{fontSize:11,color:"#3a3a5a",marginBottom:18}}>All figures below are real completed payments from the transactions table — never estimated from user counts.</div>
+
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:14,marginBottom:24}}>
         {[
-          ["💰","Total Revenue",    "₹"+fN(stats.totalRevenue||0), GR],
-          ["📅","Est. Monthly",     "₹"+fN(monthly),               BL],
-          ["📆","Est. Annual",      "₹"+fN(annual),                "#a855f7"],
-          ["👑","Premium Users",    premium.length,                 R],
-          ["⭐","Basic Users",      basic.length,                   PU],
-          ["📱","Mobile Users",     mobile.length,                  BL],
+          ["💰","Total Revenue (All Time)", "₹"+fN(totalRevenue), GR],
+          ["📅","This Month",     "₹"+fN(revenue.thisMonthRevenue||0), BL],
+          ["📆","Last Month",     "₹"+fN(revenue.lastMonthRevenue||0), "#a855f7"],
+          ["🧾","Transactions",   fN(revenue.transactionCount||0), AM],
+          ["👑","Premium Users",  premium, R],
+          ["⭐","Basic Users",    basic,   PU],
+          ["📱","Mobile Users",   mobile,  BL],
         ].map(([ico,lbl,val,col])=>(
           <div key={lbl} className="kpi">
             <div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:col,borderRadius:"2px 0 0 2px"}}/>
@@ -1557,43 +1581,51 @@ function RevenuePage({stats,users}){
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,color:col}}>{val}</div>
           </div>
         ))}
+        {trend!==null&&(
+          <div className="kpi">
+            <div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:trend>=0?GR:"#f87171",borderRadius:"2px 0 0 2px"}}/>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{fontSize:10,color:"#3a3a5a",fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>Month-over-Month</span>
+              <span style={{fontSize:20}}>{trend>=0?"📈":"📉"}</span>
+            </div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,color:trend>=0?GR:"#f87171"}}>{trend>=0?"+":""}{trend}%</div>
+          </div>
+        )}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
-        {/* Revenue Bar Chart */}
+        {/* Real monthly revenue trend — actual transactions, last 12 months */}
         <div className="card" style={{padding:24}}>
-          <BarChart data={revenueByPlan.map(p=>({label:p.label,value:p.value}))} height={180} color={GR} title="💰 Revenue by Plan (Monthly ₹)"/>
+          <LineChart data={(revenue.monthlyRevenue||[]).map(m=>({label:m.label,value:m.value}))} height={180} color={GR} title="💰 Real Monthly Revenue (Last 12 Months)"/>
         </div>
 
-        {/* Subscription breakdown */}
+        {/* Real revenue by plan — actual sums from paid transactions */}
         <div className="card" style={{padding:24}}>
-          <div style={{fontSize:13,fontWeight:700,marginBottom:18,color:"#e2e2f0"}}>📊 Subscription Distribution</div>
-          {[
-            {label:"Premium ₹499/mo",count:premium.length,color:R,     rev:premium.length*499},
-            {label:"Basic ₹299/mo",  count:basic.length,  color:PU,    rev:basic.length*299},
-            {label:"Mobile ₹149/mo", count:mobile.length, color:BL,    rev:mobile.length*149},
-            {label:"Free Plan",      count:free.length,   color:"#3a3a5a",rev:0},
-          ].map(p=>(
-            <div key={p.label} style={{marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{width:10,height:10,borderRadius:3,background:p.color,flexShrink:0}}/>
-                  <span style={{fontSize:13,fontWeight:600,color:"#e2e2f0"}}>{p.label}</span>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:18,color:"#e2e2f0"}}>📊 Revenue by Plan (Actual)</div>
+          {(revenue.revenueByPlan||[]).length===0
+            ?<div style={{color:"#3a3a5a",fontSize:12,textAlign:"center",padding:"20px 0"}}>No completed transactions yet</div>
+            :(revenue.revenueByPlan||[]).map(p=>{
+              const col=PLAN_COLORS[p.plan_id]||"#3a3a5a";
+              const pct=totalRevenue>0?Math.round((p.amount/totalRevenue)*100):0;
+              return(
+                <div key={p.plan_id} style={{marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:10,height:10,borderRadius:3,background:col,flexShrink:0}}/>
+                      <span style={{fontSize:13,fontWeight:600,color:"#e2e2f0"}}>{p.label}</span>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <span style={{fontSize:12,color:col,fontWeight:700}}>₹{fN(p.amount)}</span>
+                      <span style={{fontSize:11,color:"#3a3a5a",marginLeft:8}}>{pct}%</span>
+                    </div>
+                  </div>
+                  <div style={{height:8,background:"#181828",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:pct+"%",background:`linear-gradient(90deg,${col},${col}88)`,borderRadius:4,transition:"width .6s ease",minWidth:pct>0?8:0}}/>
+                  </div>
                 </div>
-                <div style={{textAlign:"right"}}>
-                  <span style={{fontSize:12,color:p.color,fontWeight:700}}>₹{fN(p.rev)}/mo</span>
-                  <span style={{fontSize:11,color:"#3a3a5a",marginLeft:8}}>{p.count} users</span>
-                </div>
-              </div>
-              <div style={{height:8,background:"#181828",borderRadius:4,overflow:"hidden"}}>
-                <div style={{height:"100%",width:Math.round((p.count/total)*100)+"%",background:`linear-gradient(90deg,${p.color},${p.color}88)`,borderRadius:4,transition:"width .6s ease",minWidth:p.count>0?8:0}}/>
-              </div>
-            </div>
-          ))}
-          <div style={{marginTop:20,padding:"14px 18px",background:"rgba(0,200,83,.06)",borderRadius:10,border:"1px solid rgba(0,200,83,.15)"}}>
-            <div style={{fontSize:12,color:"#3a3a5a",marginBottom:4}}>Estimated Monthly Revenue</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:GR}}>₹{fN(monthly)}</div>
-          </div>
+              );
+            })
+          }
         </div>
       </div>
     </div>
@@ -1601,12 +1633,17 @@ function RevenuePage({stats,users}){
 }
 
 // ── MAIN ADMIN ────────────────────────────────────────────
-export default function Admin({onNavigate,user,employeeRole}){
+export default function Admin({onNavigate,user,employeeRole,onLogout}){
+  // "ALL" = legacy full-admin account or SUPER_ADMIN — sees everything.
+  // Anything else = that department's own slice of the dashboard only.
+  const isFullAdmin = user?.role==="admin" || employeeRole==="SUPER_ADMIN" || !employeeRole;
+  const dept = isFullAdmin ? "ALL" : (ROLE_DEPT[employeeRole] || "ALL");
   const[verified, setVerified]=useState(false);
   const[showFace, setShowFace]=useState(true);
   const[page,     setPage]    =useState("dashboard");
   const[collapsed,setCollapsed]=useState(false);
   const[stats,    setStats]   =useState({});
+  const[revenue,  setRevenue] =useState(null);
   const[content,  setContent] =useState([]);
   const[users,    setUsers]   =useState([]);
   const[ads,      setAds]     =useState([]);
@@ -1629,13 +1666,19 @@ export default function Admin({onNavigate,user,employeeRole}){
   async function loadData(){
     setLoading(true);
     try{
-      const[s,c,u,a]=await Promise.all([
-        db.getAdminStats().catch(()=>({})),
+      // Real stats + real revenue now come from the backend (JWT-authorized,
+      // works for any logged-in employee role, not just the legacy admin
+      // account), instead of guessing numbers or relying on open Supabase
+      // reads from the browser.
+      const fetchJson=(url)=>fetch(url,{headers:authHeader()}).then(r=>r.json()).then(j=>j.success?j.data:null).catch(()=>null);
+      const[s,rev,c,u,a]=await Promise.all([
+        fetchJson(`${API}/api/admin/stats`),
+        fetchJson(`${API}/api/admin/revenue-analytics`),
         supabase.from("content").select("*").order("created_at",{ascending:false}).then(r=>r.data||[]),
         db.getAllUsers().catch(()=>[]),
         db.getAllAds().catch(()=>[]),
       ]);
-      setStats(s);setContent(c);setUsers(u);setAds(a);
+      setStats(s||{});setRevenue(rev||null);setContent(c);setUsers(u);setAds(a);
     }catch(e){}
     setLoading(false);
   }
@@ -1685,9 +1728,14 @@ export default function Admin({onNavigate,user,employeeRole}){
           <div className="nav" onClick={loadData} style={{color:BL,justifyContent:collapsed?"center":"flex-start",marginBottom:2}} title={collapsed?"Refresh":undefined}>
             <span style={{fontSize:16}}>↻</span>{!collapsed&&<span style={{fontSize:12}}>Refresh Data</span>}
           </div>
-          <div className="nav" onClick={()=>onNavigate("home")} style={{color:"#f87171",justifyContent:collapsed?"center":"flex-start"}} title={collapsed?"Home":undefined}>
-            <span style={{fontSize:16}}>🏠</span>{!collapsed&&<span style={{fontSize:12}}>Back to Home</span>}
-          </div>
+          {isFullAdmin
+            ?<div className="nav" onClick={()=>onNavigate("home")} style={{color:"#f87171",justifyContent:collapsed?"center":"flex-start"}} title={collapsed?"Home":undefined}>
+              <span style={{fontSize:16}}>🏠</span>{!collapsed&&<span style={{fontSize:12}}>Back to Home</span>}
+            </div>
+            :<div className="nav" onClick={onLogout} style={{color:"#f87171",justifyContent:collapsed?"center":"flex-start"}} title={collapsed?"Sign Out":undefined}>
+              <span style={{fontSize:16}}>🚪</span>{!collapsed&&<span style={{fontSize:12}}>Sign Out</span>}
+            </div>
+          }
         </div>
       </div>
 
@@ -1716,10 +1764,13 @@ export default function Admin({onNavigate,user,employeeRole}){
           {/* DASHBOARD */}
           {page==="dashboard"&&(
             <div style={{animation:"fadeIn .3s ease"}}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:24}}>Dashboard Overview</div>
-              {/* KPIs */}
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:4}}>
+                {dept==="ALL"?"Dashboard Overview":`${dept.charAt(0)+dept.slice(1).toLowerCase()} Dashboard`}
+              </div>
+              {dept!=="ALL"&&<div style={{fontSize:11,color:"#3a3a5a",marginBottom:20}}>Showing only {dept.toLowerCase()}-related data for your role.</div>}
+              {/* KPIs — scoped to this employee's department; full admin sees everything */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:14,marginBottom:26}}>
-                {[
+                {(dept==="ALL"?[
                   ["👥","Total Users",    fN(stats.totalUsers),       BL],
                   ["👑","Paid Subs",      fN(stats.activeSubs),       R],
                   ["💰","Revenue",        "₹"+fN(stats.totalRevenue), GR],
@@ -1728,7 +1779,29 @@ export default function Admin({onNavigate,user,employeeRole}){
                   ["📢","Active Ads",     stats.activeAds||0,         "#06b6d4"],
                   ["🔴","Live Now",       liveContent.filter(c=>c.is_active).length, R],
                   ["🆓","Free Users",     fN((users||[]).filter(u=>!u.plan||u.plan==="free").length), "#3a3a5a"],
-                ].map(([ico,lbl,val,col])=>(
+                ]:dept==="FINANCE"?[
+                  ["💰","Total Revenue",  "₹"+fN(stats.totalRevenue), GR],
+                  ["📅","This Month",     "₹"+fN(revenue?.thisMonthRevenue||0), BL],
+                  ["👑","Paid Subs",      fN(stats.activeSubs),       R],
+                  ["🧾","Transactions",   fN(revenue?.transactionCount||0), AM],
+                ]:dept==="CONTENT"?[
+                  ["🎬","Total Content",  stats.totalContent||0,      AM],
+                  ["👁️","Total Views",   fN(stats.totalViews),       "#a855f7"],
+                  ["🎥","Movies",         (content||[]).filter(c=>c.type==="Movie").length, R],
+                  ["📺","Web Series",     (content||[]).filter(c=>c.type==="Web Series").length, BL],
+                ]:dept==="LIVE"?[
+                  ["🔴","Live Channels",  liveContent.length,         R],
+                  ["📡","Live Now",       liveContent.filter(c=>c.is_active).length, GR],
+                  ["👁️","Total Views",   fN(stats.totalViews),       "#a855f7"],
+                ]:dept==="SUPPORT"?[
+                  ["👥","Total Users",    fN(stats.totalUsers),       BL],
+                  ["🆓","Free Users",     fN((users||[]).filter(u=>!u.plan||u.plan==="free").length), "#3a3a5a"],
+                  ["👑","Paid Subs",      fN(stats.activeSubs),       R],
+                ]:/* ANALYTICS */[
+                  ["👁️","Total Views",   fN(stats.totalViews),       "#a855f7"],
+                  ["🎬","Content",        stats.totalContent||0,      AM],
+                  ["👥","Total Users",    fN(stats.totalUsers),       BL],
+                ]).map(([ico,lbl,val,col])=>(
                   <div key={lbl} className="kpi" style={{animation:"countUp .5s ease"}}>
                     <div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:col,borderRadius:"2px 0 0 2px"}}/>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
@@ -1740,30 +1813,40 @@ export default function Admin({onNavigate,user,employeeRole}){
                 ))}
               </div>
 
-              {/* Charts */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:18}}>
-                <div className="card" style={{padding:24}}>
-                  <BarChart
-                    data={[...content].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,7).map(c=>({label:c.title.slice(0,8),value:c.views||0}))}
-                    height={160} color={R} title="🔥 Top Content Views"
-                  />
+              {/* Charts — content chart only for depts that touch content; user-plan chart only for finance/full admin */}
+              {(dept==="ALL"||dept==="CONTENT"||dept==="LIVE"||dept==="ANALYTICS")&&(
+                <div style={{display:"grid",gridTemplateColumns: dept==="ALL"?"1fr 1fr":"1fr",gap:18,marginBottom:18}}>
+                  <div className="card" style={{padding:24}}>
+                    <BarChart
+                      data={[...content].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,7).map(c=>({label:c.title.slice(0,8),value:c.views||0}))}
+                      height={160} color={R} title="🔥 Top Content Views"
+                    />
+                  </div>
+                  {dept==="ALL"&&(
+                    <div className="card" style={{padding:24}}>
+                      <DonutChart
+                        data={[
+                          {label:`Premium (${(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium").length})`,value:(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium").length,color:R},
+                          {label:`Basic (${(users||[]).filter(u=>u.plan?.includes("basic")).length})`,value:(users||[]).filter(u=>u.plan?.includes("basic")).length,color:PU},
+                          {label:`Mobile (${(users||[]).filter(u=>u.plan?.includes("mobile")).length})`,value:(users||[]).filter(u=>u.plan?.includes("mobile")).length,color:BL},
+                          {label:`Free (${(users||[]).filter(u=>!u.plan||u.plan==="free").length})`,value:(users||[]).filter(u=>!u.plan||u.plan==="free").length,color:"#3a3a5a"},
+                        ]}
+                        size={150}
+                        title="👥 User Plans"
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="card" style={{padding:24}}>
-                  <DonutChart
-                    data={[
-                      {label:`Premium (${(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium").length})`,value:(users||[]).filter(u=>u.plan?.includes("premium")||u.plan==="premium").length,color:R},
-                      {label:`Basic (${(users||[]).filter(u=>u.plan?.includes("basic")).length})`,value:(users||[]).filter(u=>u.plan?.includes("basic")).length,color:PU},
-                      {label:`Mobile (${(users||[]).filter(u=>u.plan?.includes("mobile")).length})`,value:(users||[]).filter(u=>u.plan?.includes("mobile")).length,color:BL},
-                      {label:`Free (${(users||[]).filter(u=>!u.plan||u.plan==="free").length})`,value:(users||[]).filter(u=>!u.plan||u.plan==="free").length,color:"#3a3a5a"},
-                    ]}
-                    size={150}
-                    title="👥 User Plans"
-                  />
+              )}
+              {dept==="FINANCE"&&(
+                <div className="card" style={{padding:24,marginBottom:18}}>
+                  <LineChart data={(revenue?.monthlyRevenue||[]).map(m=>({label:m.label,value:m.value}))} height={160} color={GR} title="💰 Revenue Trend (see Revenue page for full breakdown)"/>
                 </div>
-              </div>
+              )}
 
-              {/* Tables */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+              {/* Tables — content table for content/live/full-admin depts; user table for support/full-admin only */}
+              <div style={{display:"grid",gridTemplateColumns: (dept==="ALL")?"1fr 1fr":"1fr",gap:18}}>
+                {(dept==="ALL"||dept==="CONTENT"||dept==="LIVE")&&(
                 <div className="card" style={{padding:22}}>
                   <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#e2e2f0"}}>🔥 Top 5 Content</div>
                   {[...content].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,5).map((c,i)=>(
@@ -1778,6 +1861,8 @@ export default function Admin({onNavigate,user,employeeRole}){
                     </div>
                   ))}
                 </div>
+                )}
+                {(dept==="ALL"||dept==="SUPPORT")&&(
                 <div className="card" style={{padding:22}}>
                   <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#e2e2f0"}}>👥 Recent Users</div>
                   {[...users].slice(0,5).map((u,i)=>(
@@ -1793,6 +1878,7 @@ export default function Admin({onNavigate,user,employeeRole}){
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1802,7 +1888,7 @@ export default function Admin({onNavigate,user,employeeRole}){
           {page==="analytics" &&<AnalyticsPage stats={stats} content={content} users={users}/>}
           {page==="users"     &&<UsersPage users={users} onRefresh={loadData} showToast={showToast}/>}
           {page==="ads"       &&<AdsPage ads={ads} onRefresh={loadData} showToast={showToast}/>}
-          {page==="revenue"   &&<RevenuePage stats={stats} users={users}/>}
+          {page==="revenue"   &&<RevenuePage revenue={revenue} users={users}/>}
           {page==="employees" &&<EmployeesPage showToast={showToast}/>}
           {page==="tickets"   &&<SupportTicketsPage showToast={showToast}/>}
           {page==="approvals" &&<ApprovalsPage showToast={showToast}/>}

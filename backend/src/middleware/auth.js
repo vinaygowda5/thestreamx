@@ -19,4 +19,16 @@ function requireAdmin(req, res, next) {
   });
 }
 
-module.exports = { requireAuth, requireAdmin };
+// requireStaff — anyone with an Admin-panel login: the legacy full-admin
+// account OR any active employee (Finance Manager, Content Manager, etc).
+// Use this for panel endpoints that every employee should be able to read
+// (dashboard stats, revenue analytics); use requireAdmin only for things
+// that must stay owner-only regardless of employee role.
+function requireStaff(req, res, next) {
+  requireAuth(req, res, () => {
+    if (req.user.role !== "admin" && req.user.role !== "employee") return err(res, "Staff access only", 403);
+    next();
+  });
+}
+
+module.exports = { requireAuth, requireAdmin, requireStaff };

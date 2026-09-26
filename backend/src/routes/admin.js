@@ -1,8 +1,9 @@
 const router = require("express").Router();
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin, requireStaff } = require("../middleware/auth");
 const { authorize, identify } = require("../middleware/authorize");
 const c = require("../controllers/adminController");
-router.get("/stats",           requireAdmin, c.getStats);
+router.get("/stats",             requireStaff, c.getStats);
+router.get("/revenue-analytics", requireStaff, c.getRevenueAnalytics);
 router.get("/users",           requireAdmin, c.getAllUsers);
 router.put("/users/:id/suspend", requireAdmin, c.suspendUser);
 router.put("/users/:id/activate",requireAdmin, c.activateUser);

@@ -13,6 +13,22 @@ async function logLoginEvent(userId, eventType, req) {
   } catch (e) { /* logging failure should never block login/logout itself */ }
 }
 
+// GET /api/employee-auth/check-email?email=...
+// Lets the main login screen silently detect whether an email belongs to
+// an active employee, so it can switch to asking for Employee ID + password
+// instead of sending an OTP. Deliberately returns only a boolean, nothing
+// else about the account, to avoid leaking who has an account at all.
+async function checkEmail(req, res) {
+  const email = (req.query.email || "").toLowerCase().trim();
+  if (!email) return err(res, "email is required");
+  const { data: user } = await sb.from("users")
+    .select("id, employee_status")
+    .eq("email", email)
+    .not("employee_role_id", "is", null)
+    .maybeSingle();
+  return ok(res, { isEmployee: !!user && user.employee_status === "ACTIVE" });
+}
+
 // POST /api/employee-auth/login  { email, employeeId, password }
 // This is the ONLY way employees/managers log in — no OTP, ever.
 async function employeeLogin(req, res) {
@@ -70,4 +86,4 @@ async function employeeLogout(req, res) {
   return ok(res, null, "Logged out");
 }
 
-module.exports = { employeeLogin, employeeLogout };
+module.exports = { employeeLogin, employeeLogout, checkEmail };

@@ -56,7 +56,11 @@ function getDeviceOS(){
   return"Unknown";
 }
 
-export default function Login({onLogin}){
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod|Mobile|BlackBerry|Windows Phone|Opera Mini/i.test(navigator.userAgent);
+}
+
+export default function Login({onLogin,onEmployeeLogin}){
   const[step,        setStep]        =useState("email");
   const[email,       setEmail]       =useState("");
   const[phone,       setPhone]       =useState("");
@@ -66,6 +70,12 @@ export default function Login({onLogin}){
   const[timer,       setTimer]       =useState(0);
   const[activeDevs,  setActiveDevs]  =useState([]);
   const[pendingUser, setPendingUser] =useState(null);
+  // Staff path — same login screen auto-detects an employee email and
+  // switches here instead of sending an OTP.
+  const[employeeId,  setEmployeeId]  =useState("");
+  const[empPassword, setEmpPassword] =useState("");
+  const[checkingEmail,setCheckingEmail]=useState(false);
+  const isMobile = isMobileDevice();
 
   const refs=[useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
 
@@ -82,7 +92,23 @@ export default function Login({onLogin}){
 
   async function sendOTP(){
     setError("");if(!canSend)return;
-    setLoading(true);
+    setLoading(true);setCheckingEmail(true);
+
+    // First, silently check whether this email belongs to a staff account.
+    // If it does, skip OTP entirely — employees never use OTP.
+    if(!isTest){
+      try{
+        const res=await fetch(`${API}/api/employee-auth/check-email?email=${encodeURIComponent(clean)}`);
+        const json=await res.json();
+        if(json.success&&json.data?.isEmployee){
+          setCheckingEmail(false);setLoading(false);
+          setStep("staff");
+          return;
+        }
+      }catch(e){ /* if the check itself fails, fall through to normal OTP login */ }
+    }
+    setCheckingEmail(false);
+
     if(!isTest){
       const{error}=await supabase.auth.signInWithOtp({
         email:clean,
@@ -94,6 +120,24 @@ export default function Login({onLogin}){
     setStep("otp");setTimer(60);
     setOtp(["","","","","",""]);
     setTimeout(()=>refs[0].current?.focus(),150);
+  }
+
+  async function submitStaffLogin(){
+    setError("");
+    if(isMobile){setError("Employee accounts can only sign in from a desktop or laptop.");return;}
+    if(!employeeId.trim()||!empPassword.trim()){setError("Enter your Employee ID and password");return;}
+    setLoading(true);
+    try{
+      const res=await fetch(`${API}/api/employee-auth/login`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:clean,employeeId:employeeId.trim(),password:empPassword}),
+      });
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg||"Login failed");
+      localStorage.setItem("streamx_token",json.data.token);
+      onEmployeeLogin({id:json.data.user.id,name:json.data.user.name,email:json.data.user.email,roleName:json.data.user.roleName});
+    }catch(e){setError(e.message);}
+    setLoading(false);
   }
 
   async function verifyOTP(code){
@@ -303,8 +347,34 @@ export default function Login({onLogin}){
             <div style={{fontSize:10,color:"#333",fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Email Address</div>
             <input style={inp} value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" type="email" autoFocus onKeyDown={e=>e.key==="Enter"&&canSend&&sendOTP()}/>
             {error&&<div style={{background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:8,padding:"9px 12px",marginTop:10,color:"#f87171",fontSize:12}}>❌ {error}</div>}
-            <button style={{...btn(canSend),marginTop:14}} onClick={sendOTP} disabled={!canSend}>{loading?"Sending code...":"Send OTP →"}</button>
+            <button style={{...btn(canSend),marginTop:14}} onClick={sendOTP} disabled={!canSend}>{checkingEmail?"Checking...":loading?"Sending code...":"Continue →"}</button>
             <div style={{textAlign:"center",marginTop:16,fontSize:11,color:"#1a1a28",lineHeight:1.8}}>By continuing, you agree to Streamx<br/>Terms of Use and Privacy Policy</div>
+          </div>
+        )}
+
+        {/* STEP — STAFF (auto-detected employee email, no OTP) */}
+        {step==="staff"&&(
+          <div style={{animation:"fadeUp .25s ease"}}>
+            <div style={{textAlign:"center",marginBottom:22}}>
+              <div style={{width:56,height:56,borderRadius:"50%",background:"rgba(21,101,192,.1)",border:"2px solid rgba(21,101,192,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,margin:"0 auto 10px"}}>🧑‍💼</div>
+              <div style={{fontSize:13,color:"#555",marginBottom:2}}>Staff sign-in for</div>
+              <div style={{fontSize:15,fontWeight:800,color:"#fff",marginBottom:4}}>{clean}</div>
+              <button onClick={()=>{setStep("email");setError("");setEmployeeId("");setEmpPassword("");}} style={{background:"none",border:"none",color:"#e50914",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>← Change email</button>
+            </div>
+
+            {isMobile&&(
+              <div style={{background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",borderRadius:10,padding:14,fontSize:13,marginBottom:16,textAlign:"center"}}>
+                📵 Employee accounts can only sign in from a desktop or laptop computer.
+              </div>
+            )}
+
+            <div style={{fontSize:10,color:"#333",fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Employee ID</div>
+            <input style={{...inp,marginBottom:12}} value={employeeId} onChange={e=>setEmployeeId(e.target.value.toUpperCase())} placeholder="e.g. STX-AB12CD" disabled={isMobile} autoFocus onKeyDown={e=>e.key==="Enter"&&submitStaffLogin()}/>
+            <div style={{fontSize:10,color:"#333",fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Password</div>
+            <input style={inp} value={empPassword} onChange={e=>setEmpPassword(e.target.value)} placeholder="Password" type="password" disabled={isMobile} onKeyDown={e=>e.key==="Enter"&&submitStaffLogin()}/>
+
+            {error&&<div style={{background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:8,padding:"9px 12px",marginTop:10,color:"#f87171",fontSize:12}}>❌ {error}</div>}
+            <button style={{...btn(!isMobile),marginTop:14}} onClick={submitStaffLogin} disabled={loading||isMobile}>{loading?"Signing in...":"Sign In →"}</button>
           </div>
         )}
 

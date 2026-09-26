@@ -5,7 +5,6 @@ import Profile from "./Profile.jsx";
 import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
 import Payment from "./Payment.jsx";
-import EmployeeLogin from "./EmployeeLogin.jsx";
 import { t } from "./i18n.js";
 import { API } from "./config.js";
 
@@ -18,7 +17,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [upgrade, setUpgrade] = useState(false);
   const [employeeRole, setEmployeeRole] = useState(null); // null = not an employee (or not checked yet)
-  const [showStaffLogin, setShowStaffLogin] = useState(false);
 
   async function checkEmployeeStatus() {
     try {
@@ -55,14 +53,15 @@ export default function App() {
     checkEmployeeStatus();
   }
 
-  // Employee ID+password login (no OTP) — goes straight into the Admin
-  // panel, never through the customer Home screen.
+  // Employee ID+password login (no OTP), now triggered from inside Login.jsx
+  // itself once it detects the email belongs to a staff account. Goes
+  // straight into the Admin panel — an employee never sees the customer
+  // Home/Search/Profile screens at all (enforced in the render below).
   function handleEmployeeLogin(employeeData) {
     const userData = { id: employeeData.id, name: employeeData.name, email: employeeData.email, role: "employee" };
     localStorage.setItem("streamx_user", JSON.stringify(userData));
     setUser(userData);
     setEmployeeRole(employeeData.roleName);
-    setShowStaffLogin(false);
     setPage("admin");
   }
 
@@ -101,13 +100,21 @@ export default function App() {
   );
 
   if (!user) {
-    if (showStaffLogin) return <EmployeeLogin onLogin={handleEmployeeLogin} onBack={() => setShowStaffLogin(false)} />;
+    // One login screen for everyone. Login.jsx itself detects, once an
+    // email is entered, whether it belongs to a staff account — if so it
+    // switches to asking for Employee ID + password instead of sending an
+    // OTP, and calls onEmployeeLogin instead of onLogin on success.
+    return <Login onLogin={handleLogin} onEmployeeLogin={handleEmployeeLogin} />;
+  }
+
+  // An employee (any role, including SUPER_ADMIN created via the Employees
+  // system) never sees the customer app at all — only the Admin panel and
+  // its own Sign Out. The legacy full-admin account (role==="admin") is
+  // unrestricted and can still browse Home/Search/Profile like before.
+  if (user.role === "employee") {
     return (
-      <div style={{ position: "relative" }}>
-        <Login onLogin={handleLogin} />
-        <button onClick={() => setShowStaffLogin(true)} style={{ position: "fixed", bottom: 14, right: 14, zIndex: 500, background: "rgba(255,255,255,.06)", border: "1px solid #1a1a26", color: "#666", borderRadius: 20, padding: "7px 14px", fontSize: 11, cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
-          Staff Login
-        </button>
+      <div style={{ minHeight: "100vh", background: "#07070c" }}>
+        <Admin onNavigate={() => {}} user={user} employeeRole={employeeRole} onLogout={handleLogout} />
       </div>
     );
   }
@@ -131,7 +138,7 @@ export default function App() {
       {/* Pages */}
       {page === "home"    && <Home    onNavigate={handleNavigate} user={user} onUpgrade={() => setUpgrade(true)} />}
       {page === "profile" && <Profile onNavigate={handleNavigate} user={user} onLogout={handleLogout} onUpgrade={() => setUpgrade(true)} />}
-      {page === "admin"   && <Admin   onNavigate={handleNavigate} user={user} employeeRole={employeeRole} />}
+      {page === "admin"   && <Admin   onNavigate={handleNavigate} user={user} employeeRole={employeeRole} onLogout={handleLogout} />}
       {page === "search"  && <Search  onNavigate={handleNavigate} user={user} onClose={() => setPage("home")} />}
 
       {/* Bottom Nav — Mobile */}
