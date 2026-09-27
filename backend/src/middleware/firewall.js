@@ -207,7 +207,7 @@ function ipGuard(req, res, next) {
   // Validate origin — only allow your frontend
   const origin  = req.headers.origin  || "";
   const referer = req.headers.referer || "";
-  const allowed = [
+    const allowed = [
     process.env.FRONTEND_URL || "https://thestreamx.com",
     "https://thestreamx.com",
     "https://www.thestreamx.com",
@@ -216,10 +216,6 @@ function ipGuard(req, res, next) {
     "http://localhost:4000",
   ];
 
-  // Vercel generates a new random preview URL on every push — allow any of
-  // those too, matching the CORS rule in server.js, not just the fixed
-  // production domain. This is what was missing and causing real traffic
-  // from the live app to get banned as "unknown origin".
   const isVercelPreview = (val) => /^https:\/\/thestreamx[a-z0-9-]*\.vercel\.app/.test(val);
 
   const isAllowed = allowed.some(a => origin.startsWith(a) || referer.startsWith(a))
