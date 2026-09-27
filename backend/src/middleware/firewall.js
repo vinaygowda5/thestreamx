@@ -207,7 +207,7 @@ function ipGuard(req, res, next) {
   // Validate origin — only allow your frontend
   const origin  = req.headers.origin  || "";
   const referer = req.headers.referer || "";
-    const allowed = [
+  const allowed = [
     process.env.FRONTEND_URL || "https://thestreamx.com",
     "https://thestreamx.com",
     "https://www.thestreamx.com",
