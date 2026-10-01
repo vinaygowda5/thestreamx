@@ -24,8 +24,18 @@ async function establishSession(user){
       body: JSON.stringify({ email: user.email }),
     });
     const json = await res.json();
-    if (json.success && json.data?.token) localStorage.setItem("streamx_token", json.data.token);
-  }catch(e){ /* backend may be briefly down — user can still browse, payment will just prompt re-auth */ }
+    if (json.success && json.data?.token) {
+      localStorage.setItem("streamx_token", json.data.token);
+    } else {
+      // Previously this failure was silent — the person would only find out
+      // much later as a confusing "No token provided" error deep inside
+      // some unrelated feature (e.g. uploading a video). Logging it here
+      // makes the real cause visible in the browser console immediately.
+      console.error("establishSession: backend did not return a token:", json.msg);
+    }
+  }catch(e){
+    console.error("establishSession: could not reach backend:", e.message);
+  }
 }
 
 const PLAN_DEVICES = {

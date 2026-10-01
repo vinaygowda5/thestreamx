@@ -328,15 +328,25 @@ export default function Home({ onNavigate, user, onUpgrade }) {
       ) : (
         <div style={{paddingTop: cat==="For You" && heroItems.length>0 ? 24 : 8}}>
 
-          {/* No content at all — show big empty state */}
+          {/* No content at all — show big empty state. The "Open Admin
+              Panel" button only makes sense for the site owner, not a
+              regular customer, so only show it to the legacy full-admin
+              account (regular employees never reach this screen at all —
+              they only ever see the Admin panel, never Home). */}
           {!hasAny && cat==="For You" && (
             <div style={{textAlign:"center",padding:"60px 20px",animation:"fadeIn .4s ease"}}>
               <div style={{fontSize:72,marginBottom:20,opacity:.3}}>🎬</div>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,marginBottom:8,color:"#2a2a36"}}>{t("no_content_title",lang)}</div>
-              <div style={{fontSize:14,color:"#222",marginBottom:24}}>{t("no_content_sub",lang)}</div>
-              <button onClick={()=>onNavigate("admin")} style={{background:"#e50914",color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",fontWeight:700,fontSize:14,cursor:"pointer"}}>
-                {t("open_admin",lang)} →
-              </button>
+              {user?.role==="admin"?(
+                <>
+                  <div style={{fontSize:14,color:"#222",marginBottom:24}}>{t("no_content_sub",lang)}</div>
+                  <button onClick={()=>onNavigate("admin")} style={{background:"#e50914",color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+                    {t("open_admin",lang)} →
+                  </button>
+                </>
+              ):(
+                <div style={{fontSize:14,color:"#222"}}>{t("no_content_sub_customer",lang)}</div>
+              )}
             </div>
           )}
 

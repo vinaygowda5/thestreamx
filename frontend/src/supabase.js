@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { API } from "./config.js";
 
 const URL = "https://rimmzvmebnyzxrycuubk.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpbW16dm1lYm55enhyeWN1dWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MjM0NzcsImV4cCI6MjA5NTM5OTQ3N30.khXzHByowmD2zWk0xW4DwdVfGrIsEq3O4SYj5twA6aU";
@@ -68,18 +69,34 @@ export const db = {
     const { data } = await supabase.from("content").select("*").order("created_at", { ascending: false });
     return data || [];
   },
+  // Routed through the backend (service-role key) instead of writing to
+  // Supabase directly from the browser — direct writes were hitting
+  // row-level security policy rejections on the content table. The
+  // backend already has these exact endpoints (requireAdmin-gated).
   async addContent(d) {
-    const { data, error } = await supabase.from("content").insert(d).select().single();
-    if (error) throw error;
-    return data;
+    const token = localStorage.getItem("streamx_token");
+    const res = await fetch(`${API}/api/admin/content`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(d),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.msg || "Failed to add content");
+    return json.data;
   },
   async updateContent(id, d) {
-    const { data, error } = await supabase.from("content").update(d).eq("id", id).select().single();
-    if (error) throw error;
-    return data;
+    const token = localStorage.getItem("streamx_token");
+    const res = await fetch(`${API}/api/admin/content/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(d),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.msg || "Failed to update content");
+    return json.data;
   },
 
-    // ✅ REAL DELETE — permanently removes from database
+  // ✅ REAL DELETE — permanently removes from database
   async deleteContent(id) {
     const { error } = await supabase.from("content").delete().eq("id", id);
     if (error) throw error;
@@ -90,6 +107,8 @@ export const db = {
      Requires the SQL migration (increment_content_views / toggle_content_like
      RPC functions + content_likes table) to be run in Supabase first. */
   async incrementViews(contentId) {
+    // Atomic server-side increment — avoids the read-then-write race that
+    // a plain `.update({views: views+1})` from the client would have.
     const { error } = await supabase.rpc("increment_content_views", { p_content_id: contentId });
     if (error) console.error("incrementViews failed:", error.message);
   },
@@ -97,6 +116,7 @@ export const db = {
     if (!userId) throw new Error("Must be logged in to like");
     const { data, error } = await supabase.rpc("toggle_content_like", { p_content_id: contentId, p_user_id: userId });
     if (error) throw error;
+    // Supabase returns an array for table-returning RPC functions
     return Array.isArray(data) ? data[0] : data;
   },
   async hasLiked(contentId, userId) {
