@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Hls from "hls.js";
 import { supabase, db } from "./supabase.js";
+import { cacheVideoForOffline } from "./offline.js";
 
 /* ═══════════════════════════════════════════════════════
    StreamX VideoPlayer — Exact Jio Hotstar Style
@@ -428,28 +429,28 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     }
   }
 
-  // ── Real Download — actually downloads the video file via the browser.
-  // Honest limitation: this only works for a direct file (e.g. .mp4) —
-  // an HLS (.m3u8) stream is many small segment files, not one file a
-  // browser can save, so there's no way to offer a real "download" for
-  // those without a much bigger server-side piece (stitching segments
-  // into one file). We say so plainly instead of faking a toast. ──
-  function handleDownload() {
+  // ── Real Download — like Jio Hotstar, this is locked inside the app,
+  // not saved to the phone's Gallery/Files (no website can do that at
+  // all). We cache the actual video bytes in the browser's private Cache
+  // Storage; playback later reads straight from that cache, no network
+  // needed. Premium-only, matching how real OTT download features work. ──
+  const [downloading, setDownloadingState] = useState(false);
+  async function handleDownload() {
+    if (!user?.id) { showToast("Sign in to download"); return; }
+    if (!isPremium) { showToast("Downloads are a Premium feature — upgrade to unlock", "err"); return; }
     if (!streamUrl) { showToast("No video file available"); return; }
-    if (streamUrl.includes(".m3u8")) {
-      showToast("This stream can't be downloaded — only direct video files can");
-      return;
+    if (streamUrl.includes(".m3u8")) { showToast("This stream can't be downloaded — only direct video files can be"); return; }
+    if (downloading) return;
+    setDownloadingState(true);
+    showToast("Downloading for offline viewing...");
+    try {
+      await cacheVideoForOffline(streamUrl);
+      await db.logDownload(user.id, content.id);
+      showToast("Downloaded — available in Profile → Downloads ✓");
+    } catch (e) {
+      showToast("Download failed: " + e.message, "err");
     }
-    const a = document.createElement("a");
-    a.href = streamUrl;
-    a.download = `${(content?.title || "video").replace(/[^a-z0-9]/gi, "_")}.mp4`;
-    a.target = "_blank";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    if (user?.id && content?.id) db.logDownload(user.id, content.id).catch(() => {});
-    showToast("Download started");
+    setDownloadingState(false);
   }
 
   // ── Mobile gesture handling: double tap to seek ──
@@ -740,7 +741,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         <div style={{ display:"flex", padding:"18px 0 6px" }}>
           {[
             { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL },
-            { icon:"⬇", label:"Download", action: handleDownload },
+            { icon: downloading ? "⏳" : "⬇", label: downloading ? "Downloading..." : "Download", action: handleDownload },
             { icon:"↗", label:"Share",    action: handleShare },
             { icon: liked ? "♥" : "♡", label: liked ? "Liked" : "Like", action: handleToggleLike, color: liked ? "#e50914" : undefined },
           ].map(btn => (

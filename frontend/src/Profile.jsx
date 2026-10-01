@@ -4,6 +4,8 @@ import { t } from "./i18n.js";
 import CustomerSupport from "./CustomerSupport.jsx";
 import { supabase, db } from "./supabase.js";
 import { promptInstall, canInstall, subscribeToPush } from "./pwa.js";
+import VideoPlayer from "./VideoPlayer.jsx";
+import { isCachedOffline, getOfflineBlobUrl, removeOfflineCache } from "./offline.js";
 
 const RED="#e50914",BG="#07070c",S1="#0f0f16",BD="#1a1a26",MT="#555";
 
@@ -18,6 +20,9 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
   const[userData,setUserData]=useState(user||{});
   const[watchlist,setWatchlist]=useState([]);
   const[history,setHistory]=useState([]);
+  const[downloads,setDownloads]=useState([]);
+  const[downloadStatus,setDownloadStatus]=useState({}); // contentId -> "checking"|"ready"|"missing"
+  const[playItem,setPlayItem]=useState(null); // content object currently open in the player
   const[installable,setInstallable]=useState(canInstall());
   useEffect(()=>{
     const t=setInterval(()=>setInstallable(canInstall()),1000);
@@ -57,14 +62,43 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
 
   async function loadData(){
     try{
-      const[w,h,n,s]=await Promise.all([
+      const[w,h,n,s,d]=await Promise.all([
         db.getWatchlist(user.id).catch(()=>[]),
         db.getHistory(user.id).catch(()=>[]),
         db.getNotifications(user.id).catch(()=>[]),
         db.getSubscription(user.id).catch(()=>null),
+        db.getDownloads(user.id).catch(()=>[]),
       ]);
-      setWatchlist(w||[]);setHistory(h||[]);setNotifs(n||[]);setSub(s||null);
+      setWatchlist(w||[]);setHistory(h||[]);setNotifs(n||[]);setSub(s||null);setDownloads(d||[]);
+      // Check each download against the actual browser cache — a download
+      // can silently disappear if the browser evicted it under storage
+      // pressure, so we show the real current state, not just "you once
+      // downloaded this."
+      (d||[]).forEach(async(item)=>{
+        const url=item.content?.stream_url;
+        if(!url)return;
+        const ok=await isCachedOffline(url);
+        setDownloadStatus(prev=>({...prev,[item.content_id]:ok?"ready":"missing"}));
+      });
     }catch(e){}
+  }
+
+  async function playFromDownload(item){
+    const url=item.content?.stream_url;
+    const blobUrl=url?await getOfflineBlobUrl(url):null;
+    if(blobUrl){
+      setPlayItem({...item.content,stream_url:blobUrl});
+    }else{
+      showToast("This download is no longer available offline — playing online instead","err");
+      setPlayItem(item.content);
+    }
+  }
+
+  async function deleteDownload(item){
+    if(item.content?.stream_url) await removeOfflineCache(item.content.stream_url);
+    await db.removeDownload(user.id,item.content_id).catch(()=>{});
+    setDownloads(ds=>ds.filter(x=>x.content_id!==item.content_id));
+    showToast("Removed from Downloads");
   }
 
   const showToast=(msg,type="ok")=>{setToast(msg);setToastType(type);setTimeout(()=>setToast(null),3000);};
@@ -165,6 +199,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
     {id:"profile",label:t("profile_tab",appLang),icon:"👤"},
     {id:"watchlist",label:t("watchlist_tab",appLang),icon:"♥"},
     {id:"history",label:t("history_tab",appLang),icon:"🕐"},
+    {id:"downloads",label:"Downloads",icon:"⬇"},
     {id:"notifications",label:`${t("alerts_tab",appLang)}${unread>0?` (${unread})`:""}`,icon:"🔔"},
     {id:"settings",label:t("settings_tab",appLang),icon:"⚙️"},
   ];
@@ -349,8 +384,10 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
               ):history.map((item,i)=>{
                 const c=item.content||{};
                 return(
-                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<history.length-1?`1px solid ${BD}22`:"none"}}>
-                    <div style={{width:52,height:36,borderRadius:6,background:`linear-gradient(135deg,${RED}22,#0a0a0f)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🎬</div>
+                  <div key={item.id} onClick={()=>c.id&&setPlayItem(c)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<history.length-1?`1px solid ${BD}22`:"none",cursor:c.id?"pointer":"default"}}>
+                    <div style={{width:52,height:36,borderRadius:6,background:`linear-gradient(135deg,${RED}22,#0a0a0f)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0,overflow:"hidden"}}>
+                      {c.thumbnail?<img src={c.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>:"🎬"}
+                    </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title||"Unknown"}</div>
                       <div style={{fontSize:11,color:MT,marginTop:2}}>
@@ -362,10 +399,58 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
                         </div>
                       )}
                     </div>
+                    {c.id&&<div style={{color:"#2a2a3a",fontSize:18}}>▶</div>}
                   </div>
                 );
               })}
             </Card>
+          </div>
+        )}
+
+        {/* ══ DOWNLOADS ══ — Premium feature, like Jio Hotstar: locked
+            inside the app only (browser cache, not your phone's Gallery —
+            no website can save there), so you can keep watching with no
+            internet. If the browser has evicted a file under storage
+            pressure, we say so honestly instead of pretending it's there. */}
+        {tab==="downloads"&&(
+          <div>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:14}}>Downloads ({downloads.length})</div>
+            {!isPremiumUser?(
+              <Card>
+                <div style={{textAlign:"center",padding:"32px 0",color:MT}}>
+                  <div style={{fontSize:36,marginBottom:10}}>👑</div>
+                  <div style={{marginBottom:14}}>Downloads are a Premium feature</div>
+                  <button onClick={onUpgrade} style={{background:RED,border:"none",color:"#fff",borderRadius:8,padding:"10px 22px",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>Upgrade to Premium</button>
+                </div>
+              </Card>
+            ):(
+              <Card>
+                {downloads.length===0?(
+                  <div style={{textAlign:"center",padding:"32px 0",color:MT}}>
+                    <div style={{fontSize:36,marginBottom:10}}>⬇</div>
+                    <div>Nothing downloaded yet</div>
+                    <div style={{fontSize:12,marginTop:4}}>Tap Download while watching a title</div>
+                  </div>
+                ):downloads.map((item,i)=>{
+                  const c=item.content||{};
+                  const status=downloadStatus[item.content_id];
+                  return(
+                    <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<downloads.length-1?`1px solid ${BD}22`:"none"}}>
+                      <div onClick={()=>status==="ready"&&playFromDownload(item)} style={{width:52,height:36,borderRadius:6,background:`linear-gradient(135deg,${RED}22,#0a0a0f)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0,overflow:"hidden",cursor:status==="ready"?"pointer":"default"}}>
+                        {c.thumbnail?<img src={c.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>:"🎬"}
+                      </div>
+                      <div onClick={()=>status==="ready"&&playFromDownload(item)} style={{flex:1,minWidth:0,cursor:status==="ready"?"pointer":"default"}}>
+                        <div style={{fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title||"Unknown"}</div>
+                        <div style={{fontSize:11,color:status==="ready"?"#00c853":status==="missing"?"#f87171":MT,marginTop:2}}>
+                          {status==="ready"?"✓ Available offline":status==="missing"?"No longer available — storage freed up":"Checking..."}
+                        </div>
+                      </div>
+                      <button onClick={()=>deleteDownload(item)} style={{background:"rgba(255,255,255,.04)",border:`1px solid ${BD}`,color:MT,borderRadius:6,padding:"5px 9px",fontSize:11,cursor:"pointer"}}>✕</button>
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
           </div>
         )}
 
