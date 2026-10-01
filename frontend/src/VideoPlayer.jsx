@@ -151,11 +151,16 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     setSubtitleUrl(content?.subtitle_url || null);
   }, [content?.id]);
 
+  // ── Real view count — increments exactly once per time this title is
+  // opened (not per render, not randomized). Replaces the old dead
+  // backend increment that the frontend never actually called. ──
   useEffect(() => {
     if (!content?.id) return;
     db.incrementViews(content.id);
   }, [content?.id]);
 
+  // ── Real likes — reflects an actual per-user like, toggleable, backed
+  // by the content_likes table (see supabase_migration_likes_views.sql) ──
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(content?.likes_count || 0);
   const [likeBusy, setLikeBusy] = useState(false);
@@ -168,7 +173,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
 
   async function handleToggleLike() {
     if (!content?.id || likeBusy) return;
-    if (!user?.id) return;
+    if (!user?.id) return; // must be logged in — button below is hidden/disabled in that case
     setLikeBusy(true);
     try {
       const result = await db.toggleLike(content.id, user.id);
@@ -410,6 +415,43 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     } catch (e) {}
   }
 
+  // ── Real Share — a working deep link (https://thestreamx.com/?watch=<id>)
+  // that reopens this exact title when visited, using the Web Share sheet
+  // on mobile and clipboard-copy on desktop. ──
+  function handleShare() {
+    const link = `${window.location.origin}${window.location.pathname}?watch=${content?.id}`;
+    if (navigator.share) {
+      navigator.share({ title: content?.title, text: `Watch ${content?.title} on StreamX`, url: link }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(link).catch(() => {});
+      showToast("Link copied!");
+    }
+  }
+
+  // ── Real Download — actually downloads the video file via the browser.
+  // Honest limitation: this only works for a direct file (e.g. .mp4) —
+  // an HLS (.m3u8) stream is many small segment files, not one file a
+  // browser can save, so there's no way to offer a real "download" for
+  // those without a much bigger server-side piece (stitching segments
+  // into one file). We say so plainly instead of faking a toast. ──
+  function handleDownload() {
+    if (!streamUrl) { showToast("No video file available"); return; }
+    if (streamUrl.includes(".m3u8")) {
+      showToast("This stream can't be downloaded — only direct video files can");
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = streamUrl;
+    a.download = `${(content?.title || "video").replace(/[^a-z0-9]/gi, "_")}.mp4`;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (user?.id && content?.id) db.logDownload(user.id, content.id).catch(() => {});
+    showToast("Download started");
+  }
+
   // ── Mobile gesture handling: double tap to seek ──
   function handleVideoTap(e) {
     const now = Date.now();
@@ -479,13 +521,6 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           </div>
         )}
 
-        {/* Buffering spinner overlay (while playing) */}
-        {buffering && phase === "playing" && (
-          <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none", zIndex:15 }}>
-            <div style={{ width:40, height:40, border:"3px solid rgba(255,255,255,.2)", borderTop:"3px solid #fff", borderRadius:"50%", animation:"vp-spin .7s linear infinite" }}/>
-          </div>
-        )}
-
         {/* Error */}
         {error && (
           <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14, background:"#000", padding:20, zIndex:30 }}>
@@ -513,13 +548,6 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           <div style={{ position:"absolute", top:"42%", left:"50%", transform:"translate(-50%,-50%)", background:"rgba(0,0,0,.75)", color:"#fff", padding:"8px 18px", borderRadius:6, fontSize:13, fontWeight:600, pointerEvents:"none", animation:"vp-fadeIn .18s ease", whiteSpace:"nowrap", zIndex:25 }}>
             {toast}
           </div>
-        )}
-
-        {/* Skip Intro */}
-        {phase === "playing" && showCtrl && progress > 30 && progress < 300 && (
-          <button onClick={(e) => { e.stopPropagation(); skipSec(90); showToast("Intro skipped"); }} style={{ position:"absolute", right:"clamp(12px,3vw,20px)", top:"clamp(52px,10vw,68px)", background:"rgba(0,0,0,.85)", backdropFilter:"blur(8px)", color:"#fff", border:"1px solid rgba(255,255,255,.25)", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer", zIndex:20, animation:"vp-fadeIn .3s ease" }}>
-            Skip Intro
-          </button>
         )}
 
         {/* Next Episode */}
@@ -712,11 +740,11 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         <div style={{ display:"flex", padding:"18px 0 6px" }}>
           {[
             { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL },
-            { icon:"⬇", label:"Download", action:()=>showToast("Downloading...") },
-            { icon:"↗", label:"Share",    action:()=>{ navigator.clipboard?.writeText(window.location.href).catch(()=>{}); showToast("Link copied!"); } },
-            { icon:"♡", label:"Rate",     action:()=>showToast("Thanks for rating!") },
+            { icon:"⬇", label:"Download", action: handleDownload },
+            { icon:"↗", label:"Share",    action: handleShare },
+            { icon: liked ? "♥" : "♡", label: liked ? "Liked" : "Like", action: handleToggleLike, color: liked ? "#e50914" : undefined },
           ].map(btn => (
-            <button key={btn.label} onClick={btn.action} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:7, background:"none", border:"none", color:"#ccc", cursor:"pointer", padding:"6px 4px" }}>
+            <button key={btn.label} onClick={btn.action} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:7, background:"none", border:"none", color: btn.color || "#ccc", cursor:"pointer", padding:"6px 4px" }}>
               <span style={{ fontSize:20, fontWeight:300 }}>{btn.icon}</span>
               <span style={{ fontSize:11, color:"#999" }}>{btn.label}</span>
             </button>

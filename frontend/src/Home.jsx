@@ -213,6 +213,19 @@ export default function Home({ onNavigate, user, onUpgrade }) {
         .eq("is_active", true)
         .order("created_at", { ascending: false });
       setContent(data || []);
+
+      // Real deep-link support — a Share link looks like
+      // https://thestreamx.com/?watch=<content-id>. Once content is
+      // loaded, check for that param and open the matching title
+      // automatically, then clean the URL so re-sharing/back button
+      // doesn't reopen it.
+      const params = new URLSearchParams(window.location.search);
+      const watchId = params.get("watch");
+      if (watchId) {
+        const match = (data || []).find(c => String(c.id) === watchId);
+        if (match) setPlayItem(match);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
     } catch(e){ setContent([]); }
     setLoading(false);
   }

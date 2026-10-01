@@ -125,6 +125,26 @@ export const db = {
     return !!data;
   },
 
+  /* ── REAL DOWNLOADS — a record of what the person has actually
+     downloaded, shown in Profile → Downloads. A web app can't silently
+     cache video files for true offline playback the way a native app
+     can, so "download" here means: trigger a real browser file download
+     of the video, and remember that they did, so they can get back to
+     it or re-download later. Requires the downloads table from the SQL
+     migration. */
+  async logDownload(userId, contentId) {
+    if (!userId || !contentId) return;
+    await supabase.from("downloads").upsert({ user_id: userId, content_id: contentId }, { onConflict: "user_id,content_id" }).catch(() => {});
+  },
+  async getDownloads(userId) {
+    if (!userId) return [];
+    const { data } = await supabase.from("downloads").select("*, content(*)").eq("user_id", userId).order("created_at", { ascending: false });
+    return data || [];
+  },
+  async removeDownload(userId, contentId) {
+    await supabase.from("downloads").delete().eq("user_id", userId).eq("content_id", contentId);
+  },
+
   /* ── WATCHLIST ── */
   async getWatchlist(userId) {
     const { data } = await supabase.from("watchlist").select("*, content(*)").eq("user_id", userId).order("added_at", { ascending: false });
