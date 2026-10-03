@@ -563,6 +563,19 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
           </div>
         )}
       </div>
+
+      {/* This was the actual bug behind "clicking History/Downloads does
+          nothing" — the click handlers set playItem, but the player
+          itself was never mounted anywhere. */}
+      {playItem && (
+        <VideoPlayer
+          key={playItem?.id}
+          content={playItem}
+          user={user}
+          onClose={()=>{setPlayItem(null);loadData();}}
+          onNext={null}
+        />
+      )}
     </div>
   );
 }

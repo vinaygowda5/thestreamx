@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Hls from "hls.js";
 import { supabase, db } from "./supabase.js";
 import { cacheVideoForOffline } from "./offline.js";
+import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
 
 /* ═══════════════════════════════════════════════════════
    StreamX VideoPlayer — Exact Jio Hotstar Style
@@ -15,12 +16,6 @@ import { cacheVideoForOffline } from "./offline.js";
    ✅ Ads system built in
    ✅ Smart MP4 + HLS detection (fixed)
 ═══════════════════════════════════════════════════════ */
-
-const FALLBACK_ADS = [
-  { id:"f1", brand:"JioFiber Ultra",   tagline:"India's Fastest Broadband",  sub_text:"1 Gbps · ₹399/mo", cta:"Get Now",   cta_url:"https://jio.com",     icon:"⚡", color:"#003580", duration:15, skip_after:5 },
-  { id:"f2", brand:"Swiggy Instamart", tagline:"Groceries in 10 Minutes!",   sub_text:"Flat 40% off",     cta:"Order Now", cta_url:"https://swiggy.com",  icon:"🛵", color:"#fc8019", duration:12, skip_after:5 },
-  { id:"f3", brand:"Dream11",          tagline:"Play Fantasy Cricket & Win", sub_text:"₹50 Free",         cta:"Play Now",  cta_url:"https://dream11.com", icon:"🏆", color:"#f3a700", duration:10, skip_after:5 },
-];
 
 const QUALITY = ["Auto","4K","1080p","720p","480p","360p"];
 const AUDIOS  = ["Hindi","English","Kannada","Tamil","Telugu","Bengali","Malayalam"]; // fallback only if content has no language set
@@ -58,18 +53,6 @@ const CSS = `
 ::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
 `;
 
-async function trackAd(adId, userId, event) {
-  if (!adId) return;
-  supabase.from("ad_impressions").insert({ ad_id: adId, user_id: userId || null, impression_type: event, created_at: new Date().toISOString() }).catch(() => {});
-}
-async function getAds(type, isPremium) {
-  if (isPremium) return [];
-  try {
-    const { data } = await supabase.from("ads").select("*").eq("is_active", true).eq("type", type).order("priority").limit(3);
-    if (data?.length > 0) return data;
-  } catch (e) {}
-  return FALLBACK_ADS;
-}
 
 export default function VideoPlayer({ content, user, onClose, onNext }) {
   const videoRef     = useRef(null);
@@ -105,12 +88,10 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const [subtitle,     setSub]          = useState("Off");
   const [speed,        setSpeed]        = useState(1);
 
-  const [currentAd,    setCurrentAd]    = useState(null);
-  const [adTimeLeft,   setAdTimeLeft]   = useState(0);
-  const [adCanSkip,    setAdCanSkip]    = useState(false);
   const [midDone,      setMidDone]      = useState([]);
-  const [bannerAd,     setBannerAd]     = useState(null);
-  const [bannerVisible,setBannerVisible]= useState(false);
+  const adContainerRef = useRef(null); // empty div Google's IMA SDK renders its real ad UI into
+  const adControllerRef = useRef(null); // one ImaAdController per player mount
+  const [adPlaying, setAdPlaying] = useState(false);
 
   const [episodes,   setEpisodes]   = useState([]);
   const [showEp,     setShowEp]     = useState(false);
@@ -179,7 +160,14 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     try {
       const result = await db.toggleLike(content.id, user.id);
       if (result) { setLiked(result.liked); setLikesCount(result.likes_count); }
-    } catch (e) { console.error("toggleLike failed:", e.message); }
+    } catch (e) {
+      // This used to fail completely silently (console.error only) — if
+      // you tap Like and nothing happens, this toast is what will finally
+      // tell you why (most commonly: the SQL migration that creates the
+      // toggle_content_like function hasn't been run in Supabase yet).
+      console.error("toggleLike failed:", e.message);
+      showToast("Like failed: " + e.message);
+    }
     setLikeBusy(false);
   }
 
@@ -240,26 +228,45 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
 
   function cleanup() {
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    if (adControllerRef.current) { adControllerRef.current.destroy(); adControllerRef.current = null; }
     clearTimeout(hideTimer.current);
     clearTimeout(tapTimer.current);
   }
 
+  function getAdController() {
+    if (adControllerRef.current) return adControllerRef.current;
+    const v = videoRef.current, c = adContainerRef.current;
+    if (!v || !c) return null;
+    adControllerRef.current = new ImaAdController({
+      videoEl: v, adContainerEl: c,
+      onEvent: (name, e) => {
+        if (name === "CONTENT_PAUSE_REQUESTED") { setAdPlaying(true); }
+        else if (name === "CONTENT_RESUME_REQUESTED" || name === "ALL_ADS_COMPLETED") { setAdPlaying(false); startVideo(); }
+        else if (name === "AD_ERROR") { setAdPlaying(false); startVideo(); } // no fill / blocked — play content normally
+        // STARTED / FIRST_QUARTILE / MIDPOINT / THIRD_QUARTILE / COMPLETE /
+        // SKIPPED / PAUSED / RESUMED / CLICK all flow through here too —
+        // nothing else to do for them right now beyond what's above, but
+        // this is where you'd hook real analytics later if you want it.
+      },
+    });
+    return adControllerRef.current;
+  }
+
+  // Called synchronously from the user opening this title (this whole
+  // component mounts as a direct result of that tap), which is what
+  // satisfies the browser's "ad playback needs a user gesture" rule —
+  // never fired on a bare page load with no interaction behind it.
   async function startInit() {
-    if (!isPremium) {
-      const [ads, allAds] = await Promise.all([getAds("pre_roll", isPremium), getAds("pre_roll", false)]);
-      if (ads.length > 0) {
-        const ad = ads[Math.floor(Math.random() * ads.length)];
-        setCurrentAd(ad); setAdTimeLeft(ad.duration || 15); setAdCanSkip(false); setPhase("preroll");
-        trackAd(ad.id, user?.id, "view");
-        if (allAds.length > 0) { setBannerAd(allAds[Math.floor(Math.random() * allAds.length)]); setBannerVisible(true); }
-        return;
-      }
-    }
-    startVideo();
+    const isEmbed = streamUrl.includes("youtube.com/embed") || streamUrl.includes("iframe");
+    if (isPremium || isEmbed) { startVideo(); return; }
+    setPhase("ad");
+    const controller = getAdController();
+    if (!controller) { startVideo(); return; }
+    controller.requestAds(content);
   }
 
   function startVideo() {
-    setPhase("playing"); setBannerVisible(false);
+    setPhase("playing");
     setTimeout(() => {
       const v = videoRef.current;
       if (!v) { setTimeout(startVideo, 300); return; }
@@ -334,11 +341,15 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         const pct = (v.currentTime / v.duration) * 100;
         [25, 50, 75].forEach(p => {
           if (pct >= p && !midDone.includes(p)) {
-            setMidDone(d => [...d, p]); v.pause();
-            getAds("mid_roll", false).then(ads => {
-              const ad = ads.length > 0 ? ads[Math.floor(Math.random()*ads.length)] : FALLBACK_ADS[1];
-              setCurrentAd(ad); setAdTimeLeft(ad.duration || 12); setAdCanSkip(false); setPhase("midroll");
-              trackAd(ad.id, user?.id, "midroll_view");
+            setMidDone(d => [...d, p]);
+            v.pause();
+            setPhase("ad");
+            const c = adContainerRef.current;
+            if (!c) { setPhase("playing"); v.play(); return; }
+            requestAdBreak({
+              videoEl: v, adContainerEl: c,
+              onAdEnd: () => { setPhase("playing"); v.play().catch(() => {}); },
+              onAdError: () => { setPhase("playing"); v.play().catch(() => {}); },
             });
           }
         });
@@ -448,7 +459,15 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
       await db.logDownload(user.id, content.id);
       showToast("Downloaded — available in Profile → Downloads ✓");
     } catch (e) {
-      showToast("Download failed: " + e.message, "err");
+      // "Failed to fetch" here almost always means the video's storage
+      // (R2, S3, etc.) hasn't been told it's OK for thestreamx.com to read
+      // the file bytes with JavaScript (CORS) — playback still works fine
+      // without that, but downloading needs it specifically.
+      if (e.message.includes("Failed to fetch") || e.name === "TypeError") {
+        showToast("Download blocked — this video's storage needs CORS enabled for downloads to work");
+      } else {
+        showToast("Download failed: " + e.message);
+      }
     }
     setDownloadingState(false);
   }
@@ -740,7 +759,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         {/* 4 icon buttons — plain row like screenshot */}
         <div style={{ display:"flex", padding:"18px 0 6px" }}>
           {[
-            { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL },
+            { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL, color: inWL ? "#00c853" : undefined },
             { icon: downloading ? "⏳" : "⬇", label: downloading ? "Downloading..." : "Download", action: handleDownload },
             { icon:"↗", label:"Share",    action: handleShare },
             { icon: liked ? "♥" : "♡", label: liked ? "Liked" : "Like", action: handleToggleLike, color: liked ? "#e50914" : undefined },

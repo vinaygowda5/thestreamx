@@ -74,7 +74,11 @@ function UniversalPlayer({ content, user, onClose, onNext }) {
       </div>
     );
   }
-  return <VideoPlayer content={content} user={user} onClose={onClose} onNext={onNext}/>;
+  // key={content?.id} forces a full remount whenever the video changes
+  // (e.g. tapping Next Episode) — this is what guarantees the ad system
+  // (and HLS, progress tracking, etc.) gets a clean mount/unmount cycle
+  // per video instead of silently carrying stale state between titles.
+  return <VideoPlayer key={content?.id} content={content} user={user} onClose={onClose} onNext={onNext}/>;
 }
 
 /* ── Content Card ── */
