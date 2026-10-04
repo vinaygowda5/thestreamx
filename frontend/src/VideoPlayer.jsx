@@ -159,7 +159,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     setLikeBusy(true);
     try {
       const result = await db.toggleLike(content.id, user.id);
-      if (result) { setLiked(result.liked); setLikesCount(result.likes_count); }
+      if (result) { setLiked(result.liked); setLikesCount(result.new_likes_count); }
     } catch (e) {
       // This used to fail completely silently (console.error only) — if
       // you tap Like and nothing happens, this toast is what will finally

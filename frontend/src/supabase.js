@@ -147,7 +147,8 @@ export const db = {
 
   /* ── WATCHLIST ── */
   async getWatchlist(userId) {
-    const { data } = await supabase.from("watchlist").select("*, content(*)").eq("user_id", userId).order("added_at", { ascending: false });
+    const { data, error } = await supabase.from("watchlist").select("*, content(*)").eq("user_id", userId).order("added_at", { ascending: false });
+    if (error) { console.error("getWatchlist failed:", error.message); return []; }
     return data || [];
   },
   async addToWatchlist(userId, contentId) {
