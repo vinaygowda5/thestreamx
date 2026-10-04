@@ -159,7 +159,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     setLikeBusy(true);
     try {
       const result = await db.toggleLike(content.id, user.id);
-      if (result) { setLiked(result.liked); setLikesCount(result.new_likes_count); }
+      if (result) { setLiked(result.liked); setLikesCount(result.likes_count); }
     } catch (e) {
       // This used to fail completely silently (console.error only) — if
       // you tap Like and nothing happens, this toast is what will finally
@@ -402,7 +402,10 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     try {
       if (inWL) { await db.removeFromWatchlist(user.id, content.id); setInWL(false); showToast("Removed from My List"); }
       else { await db.addToWatchlist(user.id, content.id); setInWL(true); showToast("Added to My List ✓"); }
-    } catch (e) {}
+    } catch (e) {
+      console.error("toggleWL failed:", e.message);
+      showToast("Watchlist failed: " + e.message);
+    }
   }
 
   // ── Real Share — a working deep link (https://thestreamx.com/?watch=<id>)
