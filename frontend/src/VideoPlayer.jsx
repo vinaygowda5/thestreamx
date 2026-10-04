@@ -369,33 +369,11 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   }, [phase, seeking, midDone, isPremium, nextCount]);
 
   useEffect(() => {
-    if (phase !== "preroll" && phase !== "midroll") return;
-    if (adTimeLeft <= 0) { resumeFromAd(); return; }
-    const t = setInterval(() => setAdTimeLeft(s => { if (s <= 1) { clearInterval(t); return 0; } return s - 1; }), 1000);
-    const sk = setTimeout(() => setAdCanSkip(true), (currentAd?.skip_after || 5) * 1000);
-    return () => { clearInterval(t); clearTimeout(sk); };
-  }, [phase]);
-
-  useEffect(() => {
     if (nextCount === null || nextCount < 0) return;
     if (nextCount === 0) { onNext?.(); return; }
     const t = setTimeout(() => setNextCount(n => n - 1), 1000);
     return () => clearTimeout(t);
   }, [nextCount]);
-
-  function resumeFromAd() {
-    trackAd(currentAd?.id, user?.id, "complete");
-    setCurrentAd(null); setAdCanSkip(false);
-    if (phase === "preroll") startVideo();
-    else { setPhase("playing"); videoRef.current?.play(); setPlaying(true); }
-  }
-  function skipAd() {
-    if (!adCanSkip) return;
-    trackAd(currentAd?.id, user?.id, "skip");
-    setCurrentAd(null); setAdCanSkip(false);
-    if (phase === "preroll") startVideo();
-    else { setPhase("playing"); videoRef.current?.play(); setPlaying(true); }
-  }
 
   function togglePlay() { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause(); resetHide(); }
   function seekTo(val) { const v = videoRef.current; if (!v) return; v.currentTime = Math.max(0, Math.min(v.duration || 0, val)); setProgress(v.currentTime); }
@@ -498,7 +476,6 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
 
   const pct    = duration > 0 ? (progress / duration) * 100 : 0;
   const bufPct = duration > 0 ? (buffered / duration) * 100 : 0;
-  const skipIn = Math.max(0, (currentAd?.skip_after || 5) - ((currentAd?.duration || 15) - adTimeLeft));
   const isEmbedUrl = streamUrl.includes("youtube.com/embed") || streamUrl.includes("iframe");
 
   return (
@@ -582,44 +559,18 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           </div>
         )}
 
-        {/* ═══ PRE-ROLL / MID-ROLL AD ═══ */}
-        {(phase === "preroll" || phase === "midroll") && currentAd && (
-          <div style={{ position:"absolute", inset:0, zIndex:60, background:`linear-gradient(160deg,${currentAd.color||"#333"}66,#000 55%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-            <div style={{ position:"absolute", top:14, left:14, background:"rgba(0,0,0,.7)", backdropFilter:"blur(8px)", color:"#aaa", fontSize:10, padding:"4px 12px", borderRadius:20, letterSpacing:3, textTransform:"uppercase", border:"1px solid rgba(255,255,255,.08)" }}>
-              {phase === "midroll" ? "Mid-roll" : "Pre-roll"} · Ad
-            </div>
-            <div style={{ position:"absolute", top:14, right:14, background:"rgba(0,0,0,.7)", color:"rgba(255,255,255,.85)", fontSize:13, fontWeight:600, padding:"5px 14px", borderRadius:20, border:"1px solid rgba(255,255,255,.1)" }}>
-              {adTimeLeft}s
-            </div>
-            <div style={{ textAlign:"center", padding:"16px 24px", maxWidth:440 }}>
-              <div style={{ width:80, height:80, borderRadius:"50%", background:`radial-gradient(circle,${currentAd.color||"#333"}55,${currentAd.color||"#333"}11)`, border:`2px solid ${currentAd.color||"#333"}66`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:38, margin:"0 auto 16px" }}>
-                {currentAd.icon || "📢"}
-              </div>
-              <div style={{ fontSize:"clamp(20px,4.5vw,28px)", fontWeight:900, color:"#fff", marginBottom:6 }}>{currentAd.brand}</div>
-              <div style={{ color:"rgba(255,255,255,.6)", fontSize:"clamp(12px,2.5vw,14px)", marginBottom:6 }}>{currentAd.tagline}</div>
-              {currentAd.sub_text && <div style={{ color:"rgba(255,255,255,.35)", fontSize:11, marginBottom:20 }}>{currentAd.sub_text}</div>}
-              <button onClick={() => { trackAd(currentAd.id, user?.id, "click"); if (currentAd.cta_url) window.open(currentAd.cta_url, "_blank"); }}
-                style={{ background:`linear-gradient(135deg,${currentAd.color||"#1565c0"},${currentAd.color||"#1565c0"}cc)`, border:"none", color:"#fff", borderRadius:10, padding:"11px 32px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                {currentAd.cta || "Learn More"}
-              </button>
-            </div>
-            <div style={{ position:"absolute", bottom:"clamp(60px,12vh,80px)", right:"clamp(14px,4vw,32px)", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
-              {adCanSkip ? (
-                <button onClick={skipAd} style={{ background:"rgba(0,0,0,.9)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,.3)", color:"#fff", borderRadius:8, padding:"10px 18px", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
-                  Skip Ad <span style={{ background:"rgba(255,255,255,.15)", borderRadius:4, padding:"1px 7px" }}>❯</span>
-                </button>
-              ) : (
-                <div style={{ background:"rgba(0,0,0,.75)", color:"#888", borderRadius:8, padding:"8px 14px", fontSize:12, border:"1px solid rgba(255,255,255,.08)" }}>Skip in {skipIn}s</div>
-              )}
-              <div style={{ width:180, height:3, background:"rgba(255,255,255,.12)", borderRadius:2, overflow:"hidden" }}>
-                <div style={{ height:"100%", background:"rgba(255,255,255,.55)", borderRadius:2, width:`${((currentAd.duration-adTimeLeft)/currentAd.duration)*100}%`, transition:"width 1s linear" }}/>
-              </div>
-            </div>
-            {!isPremium && (
-              <div style={{ position:"absolute", bottom:14, left:"50%", transform:"translateX(-50%)", background:"rgba(229,9,20,.12)", border:"1px solid rgba(229,9,20,.25)", borderRadius:20, padding:"5px 16px", fontSize:11, color:"#e50914", fontWeight:600 }}>
-                👑 Upgrade for Ad-Free Experience
-              </div>
-            )}
+        {/* ═══ REAL Google IMA ad container ═══ — Google's SDK renders its
+            own ad video + UI (progress bar, skip button once eligible,
+            etc.) directly into this div. Always present in the DOM (IMA
+            needs a real element to attach to when requestAds() runs);
+            only visible/on-top while phase === "ad". */}
+        <div
+          ref={adContainerRef}
+          style={{ position:"absolute", inset:0, zIndex: phase === "ad" ? 60 : -1, background: phase === "ad" ? "#000" : "transparent", pointerEvents: phase === "ad" ? "auto" : "none" }}
+        />
+        {phase === "ad" && (
+          <div style={{ position:"absolute", top:14, left:14, zIndex:61, background:"rgba(0,0,0,.7)", backdropFilter:"blur(8px)", color:"#aaa", fontSize:10, padding:"4px 12px", borderRadius:20, letterSpacing:3, textTransform:"uppercase", border:"1px solid rgba(255,255,255,.08)", pointerEvents:"none" }}>
+            Advertisement{IS_TEST_AD_TAG ? " (test)" : ""}
           </div>
         )}
 
@@ -720,24 +671,6 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           </div>
         )}
       </div>
-
-      {/* ═══ AD BANNER ═══ */}
-      {bannerVisible && bannerAd && phase !== "preroll" && (
-        <div style={{ background:"#111118", borderTop:"1px solid #1e1e2e", flexShrink:0, animation:"vp-fadeIn .3s ease" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 16px" }}>
-            <div style={{ width:38, height:38, borderRadius:8, background:bannerAd.color||"#333", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{bannerAd.icon || "📢"}</div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                <span style={{ background:"#f59e0b", color:"#000", fontSize:9, fontWeight:800, padding:"1px 5px", borderRadius:3 }}>Ad</span>
-                <span style={{ fontWeight:600, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:"#fff" }}>{bannerAd.tagline}</span>
-              </div>
-              <div style={{ fontSize:11, color:"#666" }}>{bannerAd.sub_text || bannerAd.brand}</div>
-            </div>
-            <button onClick={() => { trackAd(bannerAd.id, user?.id, "banner_click"); if (bannerAd.cta_url) window.open(bannerAd.cta_url, "_blank"); }} style={{ background:bannerAd.color||"#1565c0", color:"#fff", border:"none", borderRadius:7, padding:"6px 12px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{bannerAd.cta || "Learn More"}</button>
-            <button onClick={() => setBannerVisible(false)} style={{ background:"none", border:"none", color:"#444", cursor:"pointer", fontSize:16 }}>✕</button>
-          </div>
-        </div>
-      )}
 
       {/* ═══ INFO SECTION — exact Hotstar match ═══ */}
       <div style={{ flex:1, overflowY:"auto", background:"#000" }}>
