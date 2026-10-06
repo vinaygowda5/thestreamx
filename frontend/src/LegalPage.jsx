@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useBodyScrollLock } from "./scrollLock.js";
 
 /*
   LegalPage — fetches /legal/{slug}.md at runtime and renders it with a tiny
@@ -64,6 +65,7 @@ export default function LegalPage({ slug, onClose }) {
   const [blocks, setBlocks] = useState(null);
   const [error, setError] = useState(false);
   const title = TITLES[slug] || "Legal";
+  useBodyScrollLock();
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +88,7 @@ export default function LegalPage({ slug, onClose }) {
   }, [onClose]);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#07070c", overflowY: "auto", fontFamily: "Inter,sans-serif" }}>
+    <div className="sx-scroll" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#07070c", overflowY: "auto", fontFamily: "Inter,sans-serif" }}>
       <div style={{ position: "sticky", top: 0, zIndex: 2, background: "rgba(7,7,12,.96)", backdropFilter: "blur(14px)", borderBottom: "1px solid #1a1a26", display: "flex", alignItems: "center", gap: 12, padding: "12px clamp(14px,4vw,28px)" }}>
         <button onClick={onClose} aria-label="Back" style={{ background: "#14141c", border: "1px solid #24243a", color: "#fff", borderRadius: 8, width: 36, height: 36, fontSize: 18, cursor: "pointer", flexShrink: 0 }}>←</button>
         <div style={{ fontWeight: 700, fontSize: 16, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>

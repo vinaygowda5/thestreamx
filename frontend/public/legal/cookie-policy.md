@@ -48,18 +48,25 @@ These cookies are used to make advertising messages more relevant to you. They p
 
 As the means by which you can refuse cookies through your web browser controls vary from browser to browser, you should visit your browser's help menu for more information. The following is information about how to manage cookies on the most popular browsers:
 
-&#x20; **•** Chrome
-&#x20; **•** Internet Explorer
-&#x20; **•** Firefox
-&#x20; **•** Safari
-&#x20; • Edge
-&#x20; • Opera
+ **•** Chrome
+
+ **•** Internet Explorer
+
+ **•** Firefox
+
+ **•** Safari
+
+ • Edge
+ 
+ • Opera
 
 In addition, most advertising networks offer you a way to opt out of targeted advertising. If you would like to find out more information, please visit:
 
-&#x20; **•** Digital Advertising Alliance
-&#x20; **•** Digital Advertising Alliance of Canada
-&#x20; **•** European Interactive Digital Advertising Alliance
+ **•** Digital Advertising Alliance
+
+ **•** Digital Advertising Alliance of Canada
+
+ **•** European Interactive Digital Advertising Alliance
 
 ###### **What about other tracking technologies, like web beacons?**
 

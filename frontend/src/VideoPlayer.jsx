@@ -3,6 +3,7 @@ import Hls from "hls.js";
 import { supabase, db } from "./supabase.js";
 import { cacheVideoForOffline } from "./offline.js";
 import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
+import { useBodyScrollLock } from "./scrollLock.js";
 
 // Poster tile with a clean fallback — if the image is missing or fails to
 // load, show a neutral card with the title instead of a blank/odd placeholder.
@@ -121,7 +122,19 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const isPremium = ["plan_premium","plan_annual","premium"].includes(user?.plan);
   const isLive    = content?.is_live || content?.type === "Live";
   const isSeries  = content?.type === "Series" || content?.type === "Web Series";
-  const streamUrl = content?.stream_url || content?.embed_url || "";
+  const streamUrl = (content?.stream_url || content?.embed_url || "").trim();
+  useBodyScrollLock();
+
+  // If the admin changes this title's stream URL while it is open, reload it
+  // automatically instead of staying stuck on the old (broken) one.
+  const firstUrlRef = useRef(streamUrl);
+  useEffect(() => {
+    if (streamUrl === firstUrlRef.current) return;
+    firstUrlRef.current = streamUrl;
+    setError(null);
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    startInit();
+  }, [streamUrl]);
 
   // ── Fetch REAL related content + top 10 + subtitle (replaces fake repeated thumbnails) ──
   useEffect(() => {
@@ -142,8 +155,8 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
       });
 
     // Top 10 — real top viewed content (optionally filtered by same language)
-    let q = supabase.from("content").select("id,title,thumbnail,views,language").eq("is_active", true).order("views", { ascending: false }).limit(10);
-    if (content.language) q = supabase.from("content").select("id,title,thumbnail,views,language").eq("is_active", true).eq("language", content.language).order("views", { ascending: false }).limit(10);
+    let q = supabase.from("content").select("id,title,thumbnail,views,language,type,is_live").eq("is_active", true).order("views", { ascending: false }).limit(10);
+    if (content.language) q = supabase.from("content").select("id,title,thumbnail,views,language,type,is_live").eq("is_active", true).eq("language", content.language).order("views", { ascending: false }).limit(10);
     q.then(({ data }) => setTopTen(data && data.length > 0 ? data : []));
 
     // Subtitle track — only real if you uploaded a .vtt URL in admin (content.subtitle_url)
@@ -378,7 +391,12 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           // Try to recover from temporary glitches before giving up (important for live)
           if (d.type === Hls.ErrorTypes.NETWORK_ERROR && d.details !== "manifestLoadError" && netRetries < 3) { netRetries++; hls.startLoad(); return; }
           if (d.type === Hls.ErrorTypes.MEDIA_ERROR && netRetries < 3) { netRetries++; hls.recoverMediaError(); return; }
-          setError(`Stream unavailable (${d.details || d.type}${d.response?.code ? " " + d.response.code : ""}). Check URL in admin.`);
+          const code = d.response?.code;
+          const hint = code === 404 ? "Stream not found (404). It may be offline or the URL is wrong."
+            : (code === 401 || code === 403) ? `Access denied (${code}). The stream is protected.`
+            : /LoadError|Timeout/.test(d.details || "") ? "Could not reach the stream. It may be offline or block other websites (CORS)."
+            : "Stream unavailable.";
+          setError(`${hint} [${d.details || d.type}${code ? " " + code : ""}] Check URL in admin.`);
         });
       } else if (v.canPlayType("application/vnd.apple.mpegurl")) {
         v.src = streamUrl; v.play().catch(() => {}); setPlaying(true); resetHide();
@@ -548,7 +566,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
 
       {/* ═══ VIDEO AREA ═══ */}
       <div
-        style={{ position:"relative", background:"#000", flexShrink:0, height: fullscreen ? "100vh" : "clamp(220px,55vw,420px)" }}
+        style={{ position:"relative", background:"#000", flexShrink:0, height: fullscreen ? "100dvh" : "clamp(220px,56.25vw,62vh)" }}
         onMouseMove={!isMobile ? resetHide : undefined}
         onClick={!isMobile ? (e => { if (e.target === e.currentTarget || e.target.tagName === "VIDEO") togglePlay(); }) : undefined}
         onTouchStart={isMobile ? handleVideoTap : undefined}
@@ -736,7 +754,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
       </div>
 
       {/* ═══ INFO SECTION — exact Hotstar match ═══ */}
-      <div style={{ flex:1, overflowY:"auto", background:"#000" }}>
+      <div className="sx-scroll" style={{ flex:1, overflowY:"auto", background:"#000" }}>
 
         {/* Title block — plain, like screenshot */}
         <div style={{ padding:"18px clamp(14px,3vw,20px) 0" }}>
@@ -744,9 +762,9 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
             {content?.title}
           </div>
           <div style={{ fontSize:13, color:"#8a8a99" }}>
-            {[
+            {isLive ? <span style={{ color:"#e50914", fontWeight:700, letterSpacing:1 }}>● LIVE</span> : [
               content?.release_year,
-              content?.runtime || (isSeries ? null : "2h 11m"),
+              content?.runtime || null,
               isSeries ? `${content?.season_count || 1} Season${(content?.season_count||1)>1?"s":""}` : (content?.language ? `${[content?.language].length} Language${1>1?"s":""}` : null)
             ].filter(Boolean).join(" • ")}
           </div>
@@ -755,11 +773,12 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         {/* 4 icon buttons — plain row like screenshot */}
         <div style={{ display:"flex", padding:"18px 0 6px" }}>
           {[
-            { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL, color: inWL ? "#00c853" : undefined },
-            { icon: downloading ? "⏳" : "⬇", label: downloading ? "Downloading..." : "Download", action: handleDownload },
+            // Live channels can't be saved or downloaded
+            !isLive && { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL, color: inWL ? "#00c853" : undefined },
+            !isLive && { icon: downloading ? "⏳" : "⬇", label: downloading ? "Downloading..." : "Download", action: handleDownload },
             { icon:"↗", label:"Share",    action: handleShare },
             { icon: liked ? "♥" : "♡", label: liked ? "Liked" : "Like", action: handleToggleLike, color: liked ? "#e50914" : undefined },
-          ].map(btn => (
+          ].filter(Boolean).map(btn => (
             <button key={btn.label} onClick={btn.action} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:7, background:"none", border:"none", color: btn.color || "#ccc", cursor:"pointer", padding:"6px 4px" }}>
               <span style={{ fontSize:20, fontWeight:300 }}>{btn.icon}</span>
               <span style={{ fontSize:11, color:"#999" }}>{btn.label}</span>
@@ -833,9 +852,9 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
                     <div onClick={() => onNext?.(item)} style={{ width:"100%", aspectRatio:"2/3", borderRadius:6, background:"linear-gradient(160deg,#1c1c1c,#0a0a0a)", cursor:"pointer", overflow:"hidden", marginBottom:8 }}>
                       <Thumb src={item.thumbnail} title={item.title}/>
                     </div>
-                    <button onClick={() => showToast("Added to Watchlist")} style={{ width:"100%", background:"#1c1c20", border:"none", borderRadius:5, color:"#ccc", fontSize:11.5, fontWeight:600, padding:"7px 0", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                    {!(item.is_live || item.type === "Live") && <button onClick={async () => { if (!user?.id) { showToast("Sign in to use Watchlist"); return; } try { await db.addToWatchlist(user.id, item.id); showToast("Added to My List ✓"); } catch (e) { showToast("Watchlist failed: " + e.message); } }} style={{ width:"100%", background:"#1c1c20", border:"none", borderRadius:5, color:"#ccc", fontSize:11.5, fontWeight:600, padding:"7px 0", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
                       ＋ Watchlist
-                    </button>
+                    </button>}
                   </div>
                 </div>
               ))}

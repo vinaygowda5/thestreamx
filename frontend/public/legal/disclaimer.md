@@ -14,23 +14,15 @@ meaning regardless of whether they appear in singular or in plural.
 
 For the purposes of this Disclaimer:
 
-&#x20; **•** Company (referred to as either "the Company", "We", "Us" or "Our" in this
+ **•** Company (referred to as either "the Company", "We", "Us" or "Our" in this Disclaimer) refers to thestreamx.
 
-&#x20;   Disclaimer) refers to thestreamx.
+ **•** Service refers to the Website, or the Application, or both.
 
-&#x20; **•** Service refers to the Website, or the Application, or both.
+ **•** You means the individual accessing the Service, or the company, or other legal entity on behalf of which such individual is accessing or using the Service, as applicable.
 
-&#x20; **•** You means the individual accessing the Service, or the company, or other
+ **•** Website refers to thestreamx, accessible from <https://thestreamx.com>.
 
-&#x20;   legal entity on behalf of which such individual is accessing or using the
-
-&#x20;   Service, as applicable.
-
-&#x20; **•** Website refers to thestreamx, accessible from <https://thestreamx.com>.
-
-&#x20; **•** Application means the software program provided by the Company that You
-
-&#x20;   download and install on a Device, named thestreamx.
+ **•** Application means the software program provided by the Company that You download and install on a Device, named thestreamx.
 
 ###### **Disclaimer**
 
@@ -125,4 +117,4 @@ of such damages.
 
 If you have any questions about this Disclaimer, You can contact Us:
 
-&#x20; **• By email: vinaygowdaw@gmail.com**
+**• By email: vinaygowdaw@gmail.com**

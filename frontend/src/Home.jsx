@@ -194,21 +194,26 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
 
   useEffect(()=>{
     loadContent();
+    // Safety net in case Supabase realtime isn't enabled: quietly refresh
+    // every 45s and whenever the tab/app comes back to the foreground.
+    const poll = setInterval(()=>loadContent(true), 45000);
+    const onVis = ()=>{ if(!document.hidden) loadContent(true); };
+    document.addEventListener("visibilitychange", onVis);
     const fn=()=>setScrolled(window.scrollY>10);
     window.addEventListener("scroll",fn);
-    return()=>window.removeEventListener("scroll",fn);
+    return()=>{ window.removeEventListener("scroll",fn); clearInterval(poll); document.removeEventListener("visibilitychange",onVis); };
   },[]);
 
   // Realtime — when admin adds/edits content it shows instantly
   useEffect(()=>{
     const ch = supabase.channel("home-rt")
-      .on("postgres_changes",{event:"*",schema:"public",table:"content"},()=>loadContent())
+      .on("postgres_changes",{event:"*",schema:"public",table:"content"},()=>loadContent(true))
       .subscribe();
     return()=>supabase.removeChannel(ch);
   },[]);
 
-  async function loadContent(){
-    setLoading(true);
+  async function loadContent(silent){
+    if(!silent) setLoading(true);
     try {
       const { data } = await supabase
         .from("content")
@@ -216,6 +221,8 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
         .eq("is_active", true)
         .order("created_at", { ascending: false });
       setContent(data || []);
+      // keep an open player in sync with admin edits (type, stream URL, live flag...)
+      setPlayItem(p => { if(!p) return p; const f=(data||[]).find(c=>c.id===p.id); return f && JSON.stringify(f)!==JSON.stringify(p) ? f : p; });
 
       // Real deep-link support — a Share link looks like
       // https://thestreamx.com/?watch=<content-id>. Once content is
@@ -291,10 +298,16 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
       content={playItem}
       user={user}
       onClose={() => setPlayItem(null)}
-      onNext={(nextItem) => {
-        if (nextItem && nextItem.id) {
-          setPlayItem(nextItem);
-        }
+      onNext={async (nextItem) => {
+        if (!nextItem || !nextItem.id) return;
+        // "More Like This" / "Top 10" only carry a few columns (no stream_url,
+        // no live flag). Always load the FULL, current row before playing it.
+        let full = null;
+        try {
+          const { data } = await supabase.from("content").select("*").eq("id", nextItem.id).maybeSingle();
+          full = data;
+        } catch (e) {}
+        setPlayItem(full || content.find(c => c.id === nextItem.id) || nextItem);
       }}
     />
   )}

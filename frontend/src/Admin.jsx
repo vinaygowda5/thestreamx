@@ -28,9 +28,6 @@ const CSS=`
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{--r:#e50914;--bl:#1565c0;--gr:#00c853;--bg:#04040e;--s1:#080814;--s2:#0c0c1c;--bd:#181828;--mt:#3a3a5a;}
 body{background:var(--bg);color:#e2e2f0;font-family:'Inter',sans-serif;}
-::-webkit-scrollbar{width:4px;height:4px;}
-::-webkit-scrollbar-track{background:#080814;}
-::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:2px;}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideRight{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}

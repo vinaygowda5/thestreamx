@@ -73,10 +73,23 @@ export class ImaAdController {
     this._resizeHandler = () => {
       if (!this.adsManager || this.destroyed || !window.google?.ima) return;
       try {
-        this.adsManager.resize(this.videoEl.clientWidth, this.videoEl.clientHeight, window.google.ima.ViewMode.NORMAL);
+        const { w, h } = this._size();
+        this.adsManager.resize(w, h, window.google.ima.ViewMode.NORMAL);
       } catch (e) {}
     };
     window.addEventListener("resize", this._resizeHandler);
+    // The ad must always fit the player box (rotation, fullscreen, window resize)
+    if (typeof ResizeObserver !== "undefined" && this.adContainerEl) {
+      this._ro = new ResizeObserver(() => this._resizeHandler());
+      this._ro.observe(this.adContainerEl);
+    }
+  }
+
+  // Size of the box the ad must fill: the ad container itself (it covers the
+  // whole player), falling back to the video element.
+  _size() {
+    const c = this.adContainerEl, v = this.videoEl;
+    return { w: c?.clientWidth || v?.clientWidth || 640, h: c?.clientHeight || v?.clientHeight || 360 };
   }
 
   // Call this synchronously from inside the user's Play tap wherever
@@ -121,7 +134,7 @@ export class ImaAdController {
 
     const adsRequest = new ima.AdsRequest();
     adsRequest.adTagUrl = withTargeting(AD_TAG_URL, content);
-    const w = this.videoEl.clientWidth || 640, h = this.videoEl.clientHeight || 360;
+    const { w, h } = this._size();
     adsRequest.linearAdSlotWidth = w;
     adsRequest.linearAdSlotHeight = h;
     adsRequest.nonLinearAdSlotWidth = w;
@@ -154,7 +167,7 @@ export class ImaAdController {
     });
 
     try {
-      const w = this.videoEl.clientWidth || 640, h = this.videoEl.clientHeight || 360;
+      const { w, h } = this._size();
       this.adsManager.init(w, h, ima.ViewMode.NORMAL);
       this.adsManager.start();
     } catch (err) {
@@ -184,6 +197,7 @@ export class ImaAdController {
   destroy() {
     this.destroyed = true;
     window.removeEventListener("resize", this._resizeHandler);
+    if (this._ro) { try { this._ro.disconnect(); } catch (e) {} this._ro = null; }
     this._cleanupManager();
     if (this.adsLoader) { try { this.adsLoader.destroy(); } catch (e) {} this.adsLoader = null; }
     this.adDisplayContainer = null;
