@@ -1,13 +1,13 @@
 const SECTIONS = [
-  { title: "Company", links: [["About Us", "about-us"], ["Contact Us", "contact-us"]] },
+  { title: "Company", links: [["About Us", "Aboutus"], ["Contact Us", "Contactus"]] },
   { title: "Legal", links: [
     ["Privacy Policy", "privacy-policy"],
     ["Terms & Conditions", "terms-and-conditions"],
     ["Cookie Policy", "cookie-policy"],
     ["Refund & Cancellation", "refund-cancellation"],
-    ["DMCA / Copyright", "dmca"],
+    ["DMCA / Copyright", "Dmca"],
   ] },
-  { title: "Support", links: [["Help Center", "help-center"], ["Contact Support", "__support"]] },
+  { title: "Support", links: [["Help Center", "Helpcenter"], ["Contact Support", "__support"]] },
 ];
 
 export default function Footer({ onOpenLegal, onSupport }) {

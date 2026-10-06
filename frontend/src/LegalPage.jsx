@@ -12,10 +12,10 @@ const TITLES = {
   "cookie-policy": "Cookie Policy",
   "refund-cancellation": "Refund & Cancellation",
   "disclaimer": "Disclaimer",
-  "dmca": "DMCA / Copyright",
-  "about-us": "About Us",
-  "contact-us": "Contact Us",
-  "help-center": "Help Center",
+  "Dmca": "DMCA / Copyright",
+  "Aboutus": "About Us",
+  "Contactus": "Contact Us",
+  "Helpcenter": "Help Center",
 };
 
 // ── inline: **bold**, [text](url), and \-escaped characters ──

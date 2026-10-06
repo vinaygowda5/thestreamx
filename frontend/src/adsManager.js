@@ -83,6 +83,16 @@ export class ImaAdController {
   // possible - ad playback permissions follow the same browser autoplay-
   // gesture rules as a normal <video>. Never called automatically on page
   // load without a user action.
+  // Preload the SDK and initialise the ad container early (called when the
+  // viewer taps play) so later in-stream ad breaks can start reliably.
+  async prime() {
+    try { await loadImaSdk(); } catch (e) { return; }
+    if (this.destroyed) return;
+    const ima = window.google.ima;
+    if (!this.adDisplayContainer) this.adDisplayContainer = new ima.AdDisplayContainer(this.adContainerEl, this.videoEl);
+    try { this.adDisplayContainer.initialize(); } catch (e) {}
+  }
+
   async requestAds(content) {
     if (this.destroyed) return;
     let ima;

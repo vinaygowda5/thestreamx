@@ -107,6 +107,9 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const [midDone,      setMidDone]      = useState([]);
   const adContainerRef = useRef(null); // empty div Google's IMA SDK renders its real ad UI into
   const adControllerRef = useRef(null); // one ImaAdController per player mount
+  const adBreakRef     = useRef(false); // an ad break has been requested / is running
+  const pausedForAdRef = useRef(false); // we paused the content for an ad (so we resume it)
+  const liveNextAdRef  = useRef(0);     // live streams: wall-clock time of the next ad break
   const [adPlaying, setAdPlaying] = useState(false);
 
   const [episodes,   setEpisodes]   = useState([]);
@@ -256,9 +259,13 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     adControllerRef.current = new ImaAdController({
       videoEl: v, adContainerEl: c,
       onEvent: (name, e) => {
-        if (name === "CONTENT_PAUSE_REQUESTED") { setAdPlaying(true); }
-        else if (name === "CONTENT_RESUME_REQUESTED" || name === "ALL_ADS_COMPLETED") { setAdPlaying(false); startVideo(); }
-        else if (name === "AD_ERROR") { setAdPlaying(false); startVideo(); } // no fill / blocked — play content normally
+        if (name === "CONTENT_PAUSE_REQUESTED") {
+          pausedForAdRef.current = true;
+          try { videoRef.current?.pause(); } catch (err) {}
+          setAdPlaying(true);
+        } else if (name === "CONTENT_RESUME_REQUESTED" || name === "ALL_ADS_COMPLETED" || name === "AD_ERROR") {
+          endAdBreak(); // no fill / blocked / finished — carry on with the content
+        }
         // STARTED / FIRST_QUARTILE / MIDPOINT / THIRD_QUARTILE / COMPLETE /
         // SKIPPED / PAUSED / RESUMED / CLICK all flow through here too —
         // nothing else to do for them right now beyond what's above, but
@@ -273,12 +280,38 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   // satisfies the browser's "ad playback needs a user gesture" rule —
   // never fired on a bare page load with no interaction behind it.
   async function startInit() {
+    // No ad before the video — playback starts immediately. Ads come later,
+    // as in-stream breaks (see triggerAdBreak / the timeupdate handler).
+    startVideo();
     const isEmbed = streamUrl.includes("youtube.com/embed") || streamUrl.includes("iframe");
-    if (isPremium || isEmbed) { startVideo(); return; }
-    setPhase("ad");
+    if (!isPremium && !isEmbed) {
+      const controller = getAdController();
+      controller?.prime();
+    }
+  }
+
+  // Request one in-stream ad break. If an ad is served, IMA fires
+  // CONTENT_PAUSE_REQUESTED and we show it; if not (no fill / error) the
+  // content just keeps playing.
+  function triggerAdBreak() {
+    if (isPremium || isEmbedUrl || adBreakRef.current) return;
     const controller = getAdController();
-    if (!controller) { startVideo(); return; }
+    if (!controller) return;
+    adBreakRef.current = true;
     controller.requestAds(content);
+    setTimeout(() => { if (!pausedForAdRef.current) adBreakRef.current = false; }, 10000); // release lock if nothing started
+  }
+
+  function endAdBreak() {
+    const wasPaused = pausedForAdRef.current;
+    pausedForAdRef.current = false;
+    adBreakRef.current = false;
+    setAdPlaying(false);
+    const v = videoRef.current;
+    if (!v || !wasPaused) return;
+    // Live: jump back to the live edge instead of resuming from where we paused
+    if (isLive && hlsRef.current?.liveSyncPosition) { try { v.currentTime = hlsRef.current.liveSyncPosition; } catch (err) {} }
+    v.play().catch(() => {});
   }
 
   function startVideo() {
@@ -337,7 +370,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           }
           v.play().catch(() => {}); setPlaying(true); resetHide();
         });
-        hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setError("Stream unavailable. Check URL in admin."); });
+        hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setError(`Stream unavailable (${d.details || d.type}${d.response?.code ? " " + d.response.code : ""}). Check URL in admin.`); });
       } else if (v.canPlayType("application/vnd.apple.mpegurl")) {
         v.src = streamUrl; v.play().catch(() => {}); setPlaying(true); resetHide();
       } else {
@@ -353,22 +386,24 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     const onTime = () => {
       if (!seeking) { setProgress(v.currentTime); setDuration(v.duration || 0); }
       if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
-      if (!isPremium && v.duration) {
-        const pct = (v.currentTime / v.duration) * 100;
-        [25, 50, 75].forEach(p => {
-          if (pct >= p && !midDone.includes(p)) {
-            setMidDone(d => [...d, p]);
-            v.pause();
-            setPhase("ad");
-            const c = adContainerRef.current;
-            if (!c) { setPhase("playing"); v.play(); return; }
-            requestAdBreak({
-              videoEl: v, adContainerEl: c,
-              onAdEnd: () => { setPhase("playing"); v.play().catch(() => {}); },
-              onAdError: () => { setPhase("playing"); v.play().catch(() => {}); },
-            });
+      if (!isPremium) {
+        if (isLive || v.duration === Infinity) {
+          // Live / endless stream: first break after 2 min of watching, then every 10 min
+          if (!liveNextAdRef.current) liveNextAdRef.current = Date.now() + 2 * 60 * 1000;
+          else if (Date.now() >= liveNextAdRef.current && !adBreakRef.current) {
+            liveNextAdRef.current = Date.now() + 10 * 60 * 1000;
+            triggerAdBreak();
           }
-        });
+        } else if (Number.isFinite(v.duration) && v.duration > 0) {
+          // Movies / series / shows: breaks at 25%, 50%, 75%
+          const pct = (v.currentTime / v.duration) * 100;
+          [25, 50, 75].forEach(p => {
+            if (pct >= p && !midDone.includes(p)) {
+              setMidDone(d => [...d, p]);
+              triggerAdBreak();
+            }
+          });
+        }
       }
       if (v.duration && v.currentTime >= v.duration * 0.94 && nextCount === null && isSeries) setNextCount(10);
       if (user?.id && content?.id && Math.floor(v.currentTime) % 10 === 0) {
@@ -582,12 +617,12 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
             own ad video + UI (progress bar, skip button once eligible,
             etc.) directly into this div. Always present in the DOM (IMA
             needs a real element to attach to when requestAds() runs);
-            only visible/on-top while phase === "ad". */}
+            only visible/on-top while an ad is playing (adPlaying). */}
         <div
           ref={adContainerRef}
-          style={{ position:"absolute", inset:0, zIndex: phase === "ad" ? 60 : -1, background: phase === "ad" ? "#000" : "transparent", pointerEvents: phase === "ad" ? "auto" : "none" }}
+          style={{ position:"absolute", inset:0, zIndex: adPlaying ? 60 : -1, background: adPlaying ? "#000" : "transparent", pointerEvents: adPlaying ? "auto" : "none" }}
         />
-        {phase === "ad" && (
+        {adPlaying && (
           <div style={{ position:"absolute", top:14, left:14, zIndex:61, background:"rgba(0,0,0,.7)", backdropFilter:"blur(8px)", color:"#aaa", fontSize:10, padding:"4px 12px", borderRadius:20, letterSpacing:3, textTransform:"uppercase", border:"1px solid rgba(255,255,255,.08)", pointerEvents:"none" }}>
             Advertisement{IS_TEST_AD_TAG ? " (test)" : ""}
           </div>
