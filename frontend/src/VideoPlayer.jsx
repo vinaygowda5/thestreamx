@@ -65,8 +65,6 @@ const CSS = `
 .vp-sopt:hover{background:rgba(255,255,255,.05);}
 .vp-ep{display:flex;gap:12px;padding:13px 18px;border-bottom:1px solid #1e1e2e22;cursor:pointer;transition:background .14s;align-items:center;}
 .vp-ep:hover{background:rgba(255,255,255,.05);}
-::-webkit-scrollbar{width:4px;}
-::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
 `;
 
 
@@ -328,6 +326,10 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     if (!streamUrl) { setError("No video URL set. Add a URL in the admin panel."); return; }
     const isM3U8 = streamUrl.includes(".m3u8");
     const isEmbed = streamUrl.includes("youtube.com/embed") || streamUrl.includes("iframe");
+    if (!isEmbed && window.location.protocol === "https:" && /^http:\/\//i.test(streamUrl)) {
+      setError("This stream URL starts with http:// and browsers block it on a secure (https) site. Use an https:// URL in admin.");
+      return;
+    }
 
     try {
       if (isEmbed) {
@@ -370,7 +372,14 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           }
           v.play().catch(() => {}); setPlaying(true); resetHide();
         });
-        hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setError(`Stream unavailable (${d.details || d.type}${d.response?.code ? " " + d.response.code : ""}). Check URL in admin.`); });
+        let netRetries = 0;
+        hls.on(Hls.Events.ERROR, (_, d) => {
+          if (!d.fatal) return;
+          // Try to recover from temporary glitches before giving up (important for live)
+          if (d.type === Hls.ErrorTypes.NETWORK_ERROR && d.details !== "manifestLoadError" && netRetries < 3) { netRetries++; hls.startLoad(); return; }
+          if (d.type === Hls.ErrorTypes.MEDIA_ERROR && netRetries < 3) { netRetries++; hls.recoverMediaError(); return; }
+          setError(`Stream unavailable (${d.details || d.type}${d.response?.code ? " " + d.response.code : ""}). Check URL in admin.`);
+        });
       } else if (v.canPlayType("application/vnd.apple.mpegurl")) {
         v.src = streamUrl; v.play().catch(() => {}); setPlaying(true); resetHide();
       } else {

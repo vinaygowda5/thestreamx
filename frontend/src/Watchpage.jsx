@@ -128,8 +128,6 @@ export default function WatchPage({ content, user, onBack, onUpgrade }) {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Bebas+Neue&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        ::-webkit-scrollbar{width:3px;height:2px;}
-        ::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
         @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
         @keyframes spin{to{transform:rotate(360deg);}}

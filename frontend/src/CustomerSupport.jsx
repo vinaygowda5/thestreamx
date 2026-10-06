@@ -64,8 +64,6 @@ export default function CustomerSupport({ user, onClose }) {
         *{box-sizing:border-box;margin:0;padding:0;}
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes typing{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
-        ::-webkit-scrollbar{width:3px;}
-        ::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
       `}</style>
 
       {/* Header */}

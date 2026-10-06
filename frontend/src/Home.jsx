@@ -10,8 +10,6 @@ const GS = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
 body{background:#0a0a0f;color:#fff;font-family:'Manrope',sans-serif;overflow-x:hidden;}
-::-webkit-scrollbar{height:2px;width:3px;}
-::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
 .rs{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;scroll-behavior:smooth;}
 .rs::-webkit-scrollbar{height:0;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}

@@ -30,7 +30,7 @@ const CSS=`
 body{background:var(--bg);color:#e2e2f0;font-family:'Inter',sans-serif;}
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:#080814;}
-::-webkit-scrollbar-thumb{background:#e50914;border-radius:2px;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:2px;}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideRight{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
