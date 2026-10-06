@@ -5,6 +5,8 @@ import Profile from "./Profile.jsx";
 import Admin from "./Admin.jsx";
 import Search from "./Search.jsx";
 import Payment from "./Payment.jsx";
+import LegalPage from "./LegalPage.jsx";
+import CustomerSupport from "./CustomerSupport.jsx";
 import { t } from "./i18n.js";
 import { API } from "./config.js";
 
@@ -16,6 +18,8 @@ export default function App() {
   const [page,    setPage]    = useState("home");
   const [loading, setLoading] = useState(true);
   const [upgrade, setUpgrade] = useState(false);
+  const [legalPage, setLegalPage] = useState(null);     // slug of the open legal page, or null
+  const [showSupport, setShowSupport] = useState(false); // footer "Contact Support"
   const [employeeRole, setEmployeeRole] = useState(null); // null = not an employee (or not checked yet)
 
   async function checkEmployeeStatus() {
@@ -135,8 +139,14 @@ export default function App() {
         />
       )}
 
+      {/* Legal pages overlay (footer links) */}
+      {legalPage && <LegalPage slug={legalPage} onClose={() => setLegalPage(null)} />}
+
+      {/* AI Customer Support overlay (footer "Contact Support") */}
+      {showSupport && <CustomerSupport user={user} onClose={() => setShowSupport(false)} />}
+
       {/* Pages */}
-      {page === "home"    && <Home    onNavigate={handleNavigate} user={user} onUpgrade={() => setUpgrade(true)} />}
+      {page === "home"    && <Home    onNavigate={handleNavigate} user={user} onUpgrade={() => setUpgrade(true)} onOpenLegal={setLegalPage} onSupport={() => setShowSupport(true)} />}
       {page === "profile" && <Profile onNavigate={handleNavigate} user={user} onLogout={handleLogout} onUpgrade={() => setUpgrade(true)} />}
       {page === "admin"   && <Admin   onNavigate={handleNavigate} user={user} employeeRole={employeeRole} onLogout={handleLogout} />}
       {page === "search"  && <Search  onNavigate={handleNavigate} user={user} onClose={() => setPage("home")} />}

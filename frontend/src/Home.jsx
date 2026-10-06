@@ -1,3 +1,4 @@
+import Footer from "./Footer.jsx";
 import { useState, useEffect, useRef } from "react";
 import { supabase, db } from "./supabase.js";
 import VideoPlayer from "./VideoPlayer.jsx";
@@ -184,7 +185,7 @@ function Empty({ icon, msg }) {
 }
 
 /* ── Main Home ── */
-export default function Home({ onNavigate, user, onUpgrade }) {
+export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSupport }) {
   const [cat,        setCat]        = useState("For You");
   const [content,    setContent]    = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -391,6 +392,8 @@ export default function Home({ onNavigate, user, onUpgrade }) {
           )}
         </div>
       )}
+
+      <Footer onOpenLegal={onOpenLegal} onSupport={onSupport}/>
     </div>
   );
 }

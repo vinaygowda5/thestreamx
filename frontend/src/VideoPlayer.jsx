@@ -4,6 +4,22 @@ import { supabase, db } from "./supabase.js";
 import { cacheVideoForOffline } from "./offline.js";
 import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
 
+// Poster tile with a clean fallback — if the image is missing or fails to
+// load, show a neutral card with the title instead of a blank/odd placeholder.
+function Thumb({ src, title }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6, padding:8, boxSizing:"border-box", textAlign:"center" }}>
+        <span style={{ fontSize:22, opacity:.35 }}>🎬</span>
+        <span style={{ fontSize:11, color:"#888", lineHeight:1.3, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:3, WebkitBoxOrient:"vertical" }}>{title}</span>
+      </div>
+    );
+  }
+  return <img src={src} alt={title} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setFailed(true)}/>;
+}
+
+
 /* ═══════════════════════════════════════════════════════
    StreamX VideoPlayer — Exact Jio Hotstar Style
    ✅ Works on Phone, Tablet, Laptop, TV/System
@@ -750,10 +766,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
             <div style={{ display:"flex", gap:8, overflowX:"auto", padding:"0 clamp(14px,3vw,20px)" }}>
               {related.map((item) => (
                 <div key={item.id} onClick={() => onNext?.(item)} style={{ width:"clamp(108px,30vw,150px)", aspectRatio:"2/3", borderRadius:6, background:"linear-gradient(160deg,#1c1c1c,#0a0a0a)", flexShrink:0, cursor:"pointer", overflow:"hidden", position:"relative" }}>
-                  {item.thumbnail
-                    ? <img src={item.thumbnail} alt={item.title} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
-                    : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, opacity:.3 }}>🎬</div>
-                  }
+                  <Thumb src={item.thumbnail} title={item.title}/>
                 </div>
               ))}
             </div>
@@ -774,10 +787,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
                   </div>
                   <div style={{ width:"clamp(118px,30vw,150px)", flexShrink:0 }}>
                     <div onClick={() => onNext?.(item)} style={{ width:"100%", aspectRatio:"2/3", borderRadius:6, background:"linear-gradient(160deg,#1c1c1c,#0a0a0a)", cursor:"pointer", overflow:"hidden", marginBottom:8 }}>
-                      {item.thumbnail
-                        ? <img src={item.thumbnail} alt={item.title} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
-                        : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, opacity:.3 }}>🎬</div>
-                      }
+                      <Thumb src={item.thumbnail} title={item.title}/>
                     </div>
                     <button onClick={() => showToast("Added to Watchlist")} style={{ width:"100%", background:"#1c1c20", border:"none", borderRadius:5, color:"#ccc", fontSize:11.5, fontWeight:600, padding:"7px 0", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
                       ＋ Watchlist
