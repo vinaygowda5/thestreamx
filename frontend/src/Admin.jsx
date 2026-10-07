@@ -771,13 +771,16 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
         showToast("Updated: "+form.title);
         if(row&&onLocalAdd)onLocalAdd(row);
       }else{
-        const row=await db.addContent(form);
+        let row=await db.addContent(form);
         if(!row||!row.id)throw new Error("The server did not confirm the save. Please try again.");
+        if(form.is_active&&row.is_active!==true){ // saved hidden although "Active" was ticked: switch it on
+          try{const fixed=await db.updateContent(row.id,{is_active:true});if(fixed)row=fixed;}catch(e){}
+        }
         // Verify the way a VIEWER sees it (public access), so "Added" is never a guess
         let visible=false;
         try{const{data:pub}=await supabase.from("content").select("id").eq("id",row.id).eq("is_active",true).maybeSingle();visible=!!pub;}catch(e){}
         if(visible)showToast((isLiveList?"✓ Channel added: ":"✓ Added: ")+form.title+". Visible on Home now");
-        else showToast(`"${form.title}" saved, but viewers can't see it yet. Make sure Status is ON (not Hidden) and check the database access rules.`,"warn");
+        else showToast(`"${form.title}" saved, but viewers can't see it yet (Status: ${row.is_active?"ON":"OFF"}). Press "Show" on it. If it keeps turning OFF, run CHECK_CONTENT_STATUS.sql in Supabase.`,"warn");
         if(onLocalAdd)onLocalAdd(row);
       }
       setModal(null);onRefresh(true);

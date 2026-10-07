@@ -139,8 +139,15 @@ async function addContent(req, res) {
   }
   const dup = await findDuplicateLink(c.data.stream_url, null);
   if (dup) return err(res, `This link is already used by "${dup.title}". Edit that one, or add other languages inside it.`);
-  const { data, error } = await sb.from("content").insert(c.data).select().single();
+  if (c.data.is_active === undefined) c.data.is_active = true;   // new titles are visible unless the admin unticks "Active"
+  let { data, error } = await sb.from("content").insert(c.data).select().single();
   if (error) return err(res, error.message);
+  // Safety net: make sure the saved row really has the status the admin chose.
+  // (A database default/trigger can silently flip it to hidden.)
+  if (data && c.data.is_active === true && data.is_active !== true) {
+    const fix = await sb.from("content").update({ is_active: true }).eq("id", data.id).select().single();
+    if (!fix.error && fix.data) data = fix.data;
+  }
   logAudit({ req, action: "ADD_CONTENT", resourceType: "content", resourceId: data.id, after: { title: data.title, type: data.type } });
   return ok(res, data, "Content added");
 }
