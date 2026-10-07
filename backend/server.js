@@ -11,7 +11,10 @@ const {
   apiLimiter, otpLimiter, adminLimiter, loginLimiter,
 } = require("./src/middleware/firewall");
 
+const { requireStaff } = require("./src/middleware/auth");
 const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", 1); // behind Render's proxy: real client IPs for rate limits
 
 app.use(compression()); // gzip API responses — cuts payload size ~70% for JSON
 
@@ -29,7 +32,7 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.get("/api/analytics/perf", (req, res) => {
+app.get("/api/analytics/perf", requireStaff, (req, res) => { // staff only: it lists request paths
   const avg = _recentTimings.length
     ? Math.round(_recentTimings.reduce((s, t) => s + t.ms, 0) / _recentTimings.length)
     : 0;
@@ -54,7 +57,7 @@ app.use(cors({
     // streamx-o9o9htpmq-vg-group.vercel.app) — allow any of those too,
     // not just the fixed production domain, so testing previews doesn't
     // get silently CORS-blocked.
-    const isVercelPreview = origin && /^https:\/\/thestreamx[a-z0-9-]*\.vercel\.app$/.test(origin);
+    const isVercelPreview = origin && (/^https:\/\/thestreamx(-[a-z0-9]+)*-vg-group\.vercel\.app$/.test(origin) || /^https:\/\/thestreamx\.vercel\.app$/.test(origin));
     if (!origin || allowed.includes(origin) || isVercelPreview) callback(null, true);
     else callback(new Error("Not allowed by CORS"));
   },
@@ -62,8 +65,8 @@ app.use(cors({
   methods: ["GET","POST","PUT","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
 }));
-app.use(express.json({ limit:"10mb" }));
-app.use(express.urlencoded({ extended:true, limit:"10mb" }));
+app.use(express.json({ limit:"2mb" }));
+app.use(express.urlencoded({ extended:true, limit:"2mb" }));
 app.use(requestValidator);
 app.use("/api", apiLimiter);
 app.use("/api/auth/send-otp",   otpLimiter);

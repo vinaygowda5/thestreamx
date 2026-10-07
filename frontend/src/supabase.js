@@ -1,6 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import { API } from "./config.js";
 
+// ── Admin API helper ──────────────────────────────────────────────
+// All admin writes go through the backend (JWT + role checks + audit log),
+// never straight from the browser to the database.
+async function adminApi(path, method = "GET", body) {
+  const token = localStorage.getItem("streamx_token");
+  const res = await fetch(`${API}/api/admin${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  let json = null;
+  try { json = await res.json(); } catch (e) {}
+  if (!res.ok || !json?.success) throw new Error(json?.msg || `Request failed (${res.status})`);
+  return json.data;
+}
+
+
 const URL = "https://rimmzvmebnyzxrycuubk.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpbW16dm1lYm55enhyeWN1dWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MjM0NzcsImV4cCI6MjA5NTM5OTQ3N30.khXzHByowmD2zWk0xW4DwdVfGrIsEq3O4SYj5twA6aU";
 
@@ -98,8 +115,7 @@ export const db = {
 
   // ✅ REAL DELETE — permanently removes from database
   async deleteContent(id) {
-    const { error } = await supabase.from("content").delete().eq("id", id);
-    if (error) throw error;
+    await adminApi(`/content/${id}`, "DELETE");
     return true;
   },
 
@@ -234,24 +250,15 @@ export const db = {
     return data || [];
   },
   async getAllAds() {
-    const { data } = await supabase.from("ads").select("*").order("created_at", { ascending: false });
-    return data || [];
+    try { return await adminApi("/ads"); }
+    catch (e) {
+      const { data } = await supabase.from("ads").select("*").order("created_at", { ascending: false });
+      return data || [];
+    }
   },
-  async addAd(d) {
-    const { data, error } = await supabase.from("ads").insert(d).select().single();
-    if (error) throw error;
-    return data;
-  },
-  async updateAd(id, d) {
-    const { data, error } = await supabase.from("ads").update(d).eq("id", id).select().single();
-    if (error) throw error;
-    return data;
-  },
-  async deleteAd(id) {
-    const { error } = await supabase.from("ads").delete().eq("id", id);
-    if (error) throw error;
-    return true;
-  },
+  async addAd(d)        { return adminApi("/ads", "POST", d); },
+  async updateAd(id, d) { return adminApi(`/ads/${id}`, "PUT", d); },
+  async deleteAd(id)    { await adminApi(`/ads/${id}`, "DELETE"); return true; },
 
   /* ── ADMIN STATS ── */
   async getAdminStats() {
@@ -272,13 +279,12 @@ export const db = {
     };
   },
   async getAllUsers() {
-    const { data } = await supabase.from("users").select("*").order("created_at", { ascending: false });
-    return data || [];
+    try { return await adminApi("/users"); }
+    catch (e) {
+      const { data } = await supabase.from("users").select("*").order("created_at", { ascending: false });
+      return data || [];
+    }
   },
-  async suspendUser(id) {
-    await supabase.from("users").update({ is_active: false }).eq("id", id);
-  },
-  async activateUser(id) {
-    await supabase.from("users").update({ is_active: true }).eq("id", id);
-  },
+  async suspendUser(id)  { await adminApi(`/users/${id}/suspend`, "PUT"); },
+  async activateUser(id) { await adminApi(`/users/${id}/activate`, "PUT"); },
 };

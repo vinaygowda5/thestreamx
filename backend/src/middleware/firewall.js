@@ -179,10 +179,14 @@ function ipGuard(req, res, next) {
     "http://localhost:4000",
   ];
 
-  // Vercel creates a new preview URL on every push, so allow those too
-  const isVercelPreview = (val) => /^https:\/\/thestreamx[a-z0-9-]*\.vercel\.app/.test(val);
+  // Vercel creates a new preview URL on every push. Only YOUR team's previews
+  // (…-vg-group.vercel.app) are trusted, and the pattern is fully anchored.
+  const isVercelPreview = (val) => /^https:\/\/thestreamx(-[a-z0-9]+)*-vg-group\.vercel\.app(\/|$)/.test(val) || /^https:\/\/thestreamx\.vercel\.app(\/|$)/.test(val);
 
-  const isAllowed = allowed.some(a => origin.startsWith(a) || referer.startsWith(a))
+  // Exact-origin match (a plain startsWith would also accept
+  // "https://thestreamx.com.evil.io").
+  const sameSite = (val, a) => val === a || val.startsWith(a + "/");
+  const isAllowed = allowed.some(a => sameSite(origin, a) || sameSite(referer, a))
     || isVercelPreview(origin) || isVercelPreview(referer);
 
   // Allow requests with no origin (server-to-server, Postman in dev)

@@ -733,7 +733,7 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
       const res=await fetch(`${API}/api/admin/content/${c.id}`,{method:"DELETE",headers:{Authorization:`Bearer ${token}`}});
       const json=await res.json();
       if(!json.success)throw new Error(json.msg);
-      showToast(json.msg||"Deleted: "+c.title);
+      showToast(json.data?.requestId?"Delete request sent to Super Admin for approval":"Deleted: "+c.title+" (removed from the app)");
       setConfirm(null);onRefresh(true);
     }catch(e){showToast("Delete failed: "+e.message,"err");}
   }
@@ -1137,7 +1137,7 @@ function AdsPage({ads,onRefresh,showToast}){
                     <div style={{display:"flex",gap:5}}>
                       <Btn onClick={()=>{setForm({...a});setModal(a);}} variant="outline" color={BL} size="sm">Edit</Btn>
                       <Btn onClick={async()=>{await db.updateAd(a.id,{is_active:!a.is_active});showToast(a.is_active?"Paused":"Activated");onRefresh();}} variant="outline" color={a.is_active?AM:GR} size="sm">{a.is_active?"Pause":"Resume"}</Btn>
-                      <Btn onClick={async()=>{try{await supabase.from("ads").delete().eq("id",a.id);showToast("Deleted");onRefresh();}catch(e){showToast("Failed","err");}}} variant="danger" size="sm">Del</Btn>
+                      <Btn onClick={async()=>{try{await db.deleteAd(a.id);showToast("Deleted");onRefresh();}catch(e){showToast("Failed","err");}}} variant="danger" size="sm">Del</Btn>
                     </div>
                   </td>
                 </tr>

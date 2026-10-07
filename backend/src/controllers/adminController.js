@@ -79,20 +79,56 @@ async function activateUser(req, res) {
   return ok(res, null, "User activated");
 }
 
+// ── Input hardening ─────────────────────────────────────────────
+// The admin forms send whole objects; never trust them blindly. Strip
+// columns nobody should set from the browser (ids, counters, audit fields)
+// and make sure every link is a plain http(s) URL (blocks javascript: etc).
+const PROTECTED_CONTENT = ["id","created_at","updated_at","deleted_at","deleted_by","views","likes_count"];
+const PROTECTED_AD      = ["id","created_at","updated_at"];
+const URL_FIELDS        = ["stream_url","embed_url","thumbnail","trailer_url","subtitle_url","banner","video_url","image_url","click_url","link"];
+const isHttpUrl = (u) => typeof u === "string" && /^https?:\/\/[^\s<>"']+$/i.test(u.trim());
+
+function cleanBody(body, protectedFields) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "Invalid request body" };
+  const out = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (protectedFields.includes(k) || k === "__proto__" || k === "constructor") continue;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t.length > 5000) return { error: `Field "${k}" is too long` };
+      if (URL_FIELDS.includes(k) && t !== "" && !isHttpUrl(t)) return { error: `"${k}" must be a valid http(s) link` };
+      out[k] = t;
+    } else out[k] = v;
+  }
+  return { data: out };
+}
+
 async function getAllContent(req, res) {
-  const { data } = await sb.from("content").select("*").order("created_at", { ascending: false });
-  return ok(res, data || []);
+  // Soft-deleted rows (deleted_at set) are hidden from the admin list
+  let q = await sb.from("content").select("*").is("deleted_at", null).order("created_at", { ascending: false });
+  if (q.error) q = await sb.from("content").select("*").order("created_at", { ascending: false }); // column missing? fall back
+  return ok(res, q.data || []);
 }
 
 async function addContent(req, res) {
-  const { data, error } = await sb.from("content").insert(req.body).select().single();
+  const c = cleanBody(req.body, PROTECTED_CONTENT);
+  if (c.error) return err(res, c.error);
+  if (!c.data.title) return err(res, "Title is required");
+  if ((c.data.is_live || c.data.type === "Live") && !isHttpUrl(c.data.stream_url || c.data.embed_url)) {
+    return err(res, "A live channel needs a valid stream URL (https://...)");
+  }
+  const { data, error } = await sb.from("content").insert(c.data).select().single();
   if (error) return err(res, error.message);
+  logAudit({ req, action: "ADD_CONTENT", resourceType: "content", resourceId: data.id, after: { title: data.title, type: data.type } });
   return ok(res, data, "Content added");
 }
 
 async function updateContent(req, res) {
-  const { data, error } = await sb.from("content").update(req.body).eq("id", req.params.id).select().single();
+  const c = cleanBody(req.body, PROTECTED_CONTENT);
+  if (c.error) return err(res, c.error);
+  const { data, error } = await sb.from("content").update(c.data).eq("id", req.params.id).select().single();
   if (error) return err(res, error.message);
+  logAudit({ req, action: "UPDATE_CONTENT", resourceType: "content", resourceId: req.params.id, after: { fields: Object.keys(c.data) } });
   return ok(res, data, "Content updated");
 }
 
@@ -122,13 +158,17 @@ async function getAllAds(req, res) {
 }
 
 async function addAd(req, res) {
-  const { data, error } = await sb.from("ads").insert(req.body).select().single();
+  const c = cleanBody(req.body, PROTECTED_AD);
+  if (c.error) return err(res, c.error);
+  const { data, error } = await sb.from("ads").insert(c.data).select().single();
   if (error) return err(res, error.message);
   return ok(res, data);
 }
 
 async function updateAd(req, res) {
-  const { data, error } = await sb.from("ads").update(req.body).eq("id", req.params.id).select().single();
+  const c = cleanBody(req.body, PROTECTED_AD);
+  if (c.error) return err(res, c.error);
+  const { data, error } = await sb.from("ads").update(c.data).eq("id", req.params.id).select().single();
   if (error) return err(res, error.message);
   return ok(res, data);
 }

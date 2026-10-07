@@ -70,7 +70,7 @@ async function verifyOTP(req, res) {
       }
     }
 
-    const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "admin@streamx.in").split(",");
+    const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase()).filter(Boolean); // no built-in default admin
     const isAdmin = ADMIN_EMAILS.includes(clean);
 
     if (!user) {
