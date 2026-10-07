@@ -4,6 +4,7 @@ import { supabase, db } from "./supabase.js";
 import { cacheVideoForOffline } from "./offline.js";
 import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
 import { useBodyScrollLock } from "./scrollLock.js";
+import { AD_FIRST_BREAK_SEC, AD_VOD_EVERY_SEC, AD_LIVE_EVERY_SEC, AD_END_GUARD_SEC } from "./adConfig.js";
 
 // Poster tile with a clean fallback — if the image is missing or fails to
 // load, show a neutral card with the title instead of a blank/odd placeholder.
@@ -108,7 +109,9 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const adControllerRef = useRef(null); // one ImaAdController per player mount
   const adBreakRef     = useRef(false); // an ad break has been requested / is running
   const pausedForAdRef = useRef(false); // we paused the content for an ad (so we resume it)
-  const liveNextAdRef  = useRef(0);     // live streams: wall-clock time of the next ad break
+  const watchedRef     = useRef(0);     // seconds of content actually watched
+  const lastTimeRef    = useRef(0);
+  const nextBreakRef   = useRef(0);     // watched-seconds at which the next ad break happens
   const [adPlaying, setAdPlaying] = useState(false);
 
   const [episodes,   setEpisodes]   = useState([]);
@@ -307,6 +310,12 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           try { videoRef.current?.pause(); } catch (err) {}
           setAdPlaying(true);
         } else if (name === "CONTENT_RESUME_REQUESTED" || name === "ALL_ADS_COMPLETED" || name === "AD_ERROR") {
+          if (name === "AD_ERROR") {
+            const msg = e?.getError?.()?.getMessage?.() || e?.message || "no ad returned";
+            console.warn("[StreamX ads]", msg);
+            // Staff see WHY an ad didn't play (ad blocker, bad tag, no fill...) instead of guessing
+            if (["admin", "employee"].includes(user?.role) || user?.employee_id) showToast("Ad not shown: " + msg);
+          }
           endAdBreak(); // no fill / blocked / finished — carry on with the content
         }
         // STARTED / FIRST_QUARTILE / MIDPOINT / THIRD_QUARTILE / COMPLETE /
@@ -454,23 +463,18 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     const onTime = () => {
       if (!seeking) { setProgress(v.currentTime); setDuration(v.duration || 0); }
       if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
-      if (!isPremium) {
-        if (isLive || v.duration === Infinity) {
-          // Live / endless stream: first break after 2 min of watching, then every 10 min
-          if (!liveNextAdRef.current) liveNextAdRef.current = Date.now() + 2 * 60 * 1000;
-          else if (Date.now() >= liveNextAdRef.current && !adBreakRef.current) {
-            liveNextAdRef.current = Date.now() + 10 * 60 * 1000;
-            triggerAdBreak();
-          }
-        } else if (Number.isFinite(v.duration) && v.duration > 0) {
-          // Movies / series / shows: breaks at 25%, 50%, 75%
-          const pct = (v.currentTime / v.duration) * 100;
-          [25, 50, 75].forEach(p => {
-            if (pct >= p && !midDone.includes(p)) {
-              setMidDone(d => [...d, p]);
-              triggerAdBreak();
-            }
-          });
+      // ── Ad breaks: first after AD_FIRST_BREAK_SEC of watching, then regularly ──
+      const dt = v.currentTime - lastTimeRef.current;
+      lastTimeRef.current = v.currentTime;
+      if (!v.paused && dt > 0 && dt < 2) watchedRef.current += dt;   // real playback only (not seeks)
+      if (!isPremium && !adBreakRef.current) {
+        const finite = Number.isFinite(v.duration) && v.duration > 0;
+        const live = isLive || v.duration === Infinity;
+        if (!nextBreakRef.current) nextBreakRef.current = AD_FIRST_BREAK_SEC;
+        const nearEnd = finite && !live && v.duration - v.currentTime < AD_END_GUARD_SEC;
+        if (watchedRef.current >= nextBreakRef.current && !nearEnd) {
+          nextBreakRef.current = watchedRef.current + (live ? AD_LIVE_EVERY_SEC : AD_VOD_EVERY_SEC);
+          triggerAdBreak();
         }
       }
       if (v.duration && v.currentTime >= v.duration * 0.94 && nextCount === null && isSeries) setNextCount(10);
@@ -485,7 +489,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     v.addEventListener("enterpictureinpicture", () => setIsPiP(true));
     v.addEventListener("leavepictureinpicture", () => setIsPiP(false));
     return () => { v.removeEventListener("timeupdate", onTime); };
-  }, [phase, seeking, midDone, isPremium, nextCount]);
+  }, [phase, seeking, isPremium, nextCount]);
 
   useEffect(() => {
     if (nextCount === null || nextCount < 0) return;
@@ -702,7 +706,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
             <div style={{ fontSize:42 }}>🎬</div>
             <div style={{ fontWeight:700, fontSize:"clamp(15px,4vw,18px)", color:"#fff", textAlign:"center" }}>{content?.title}</div>
             <div style={{ display:"flex", gap:10, flexWrap:"wrap", justifyContent:"center" }}>
-              <button onClick={() => { setPhase("loading"); setProgress(0); setMidDone([]); setNextCount(null); startInit(); }} style={{ background:"#1565c0", color:"#fff", border:"none", borderRadius:9, padding:"10px 22px", fontWeight:700, fontSize:13, cursor:"pointer" }}>▶ Watch Again</button>
+              <button onClick={() => { setPhase("loading"); setProgress(0); setMidDone([]); watchedRef.current = 0; lastTimeRef.current = 0; nextBreakRef.current = 0; setNextCount(null); startInit(); }} style={{ background:"#1565c0", color:"#fff", border:"none", borderRadius:9, padding:"10px 22px", fontWeight:700, fontSize:13, cursor:"pointer" }}>▶ Watch Again</button>
               {onNext && <button onClick={onNext} style={{ background:"#fff", color:"#111", border:"none", borderRadius:9, padding:"10px 22px", fontWeight:700, fontSize:13, cursor:"pointer" }}>Next →</button>}
               <button onClick={onClose} style={{ background:"rgba(255,255,255,.1)", color:"#fff", border:"none", borderRadius:9, padding:"10px 16px", fontSize:13, cursor:"pointer" }}>✕ Close</button>
             </div>
@@ -769,9 +773,13 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
               <div style={{ position:"relative", height:4, background:"rgba(255,255,255,.2)", borderRadius:2, marginBottom:4 }}>
                 <div style={{ position:"absolute", left:0, top:0, height:"100%", background:"rgba(255,255,255,.35)", borderRadius:2, width:bufPct+"%" }}/>
                 <div style={{ position:"absolute", left:0, top:0, height:"100%", background:"#1565c0", borderRadius:2, width:pct+"%" }}/>
-                {[25,50,75].filter(p => !midDone.includes(p) && !isPremium).map(p => (
-                  <div key={p} style={{ position:"absolute", top:"50%", left:`${p}%`, transform:"translate(-50%,-50%)", width:7, height:7, borderRadius:"50%", background:"#f59e0b" }}/>
-                ))}
+                {!isPremium && !isLive && Number.isFinite(duration) && duration > 0 && (() => {
+                  const cues = [];
+                  for (let t = Math.max(nextBreakRef.current, AD_FIRST_BREAK_SEC); t < duration - AD_END_GUARD_SEC && cues.length < 12; t += AD_VOD_EVERY_SEC) cues.push(t);
+                  return cues.filter(t => t > progress).map(t => (
+                    <div key={t} style={{ position:"absolute", top:"50%", left:`${(t / duration) * 100}%`, transform:"translate(-50%,-50%)", width:7, height:7, borderRadius:"50%", background:"#f59e0b" }}/>
+                  ));
+                })()}
                 <div style={{ position:"absolute", top:"50%", transform:"translate(-50%,-50%)", width:14, height:14, borderRadius:"50%", background:"#fff", left:pct+"%", boxShadow:"0 2px 8px rgba(0,0,0,.5)" }}/>
               </div>
               <input type="range" className="vp-prog" min={0} max={duration||100} value={progress} step={0.1}
