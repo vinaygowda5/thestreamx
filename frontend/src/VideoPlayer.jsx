@@ -122,8 +122,40 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const isPremium = ["plan_premium","plan_annual","premium"].includes(user?.plan);
   const isLive    = content?.is_live || content?.type === "Live";
   const isSeries  = content?.type === "Series" || content?.type === "Web Series";
-  const streamUrl = (content?.stream_url || content?.embed_url || "").trim();
+  // ── Languages ──────────────────────────────────────────────
+  // Two ways a title can offer several languages:
+  //  (A) several stream links, one per language  (admin → "Other languages")
+  //  (B) ONE HLS link that already contains several audio tracks (read from the stream itself)
+  const baseUrl = (content?.stream_url || content?.embed_url || "").trim();
+  const langOptions = [
+    content?.language && baseUrl ? { language: content.language, url: baseUrl } : null,
+    ...(Array.isArray(content?.language_streams) ? content.language_streams : []),
+  ].filter(o => o && o.language && o.url);
+  const CODE_TO_LANG = { en:"English", hi:"Hindi", kn:"Kannada", ta:"Tamil", te:"Telugu", ml:"Malayalam", bn:"Bengali", mr:"Marathi", gu:"Gujarati", pa:"Punjabi", or:"Odia", ur:"Urdu" };
+  const [langPick, setLangPick] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`streamx_langpick_${content?.id}`);
+      if (saved && langOptions.some(o => o.language === saved)) return saved;
+    } catch (e) {}
+    const pref = CODE_TO_LANG[user?.language];                // viewer's profile language
+    return pref && langOptions.some(o => o.language === pref) ? pref : null;
+  });
+  const picked = langOptions.find(o => o.language === langPick);
+  const streamUrl = (picked?.url || baseUrl).trim();
+  const [audioTracks, setAudioTracks] = useState([]);          // from the HLS stream itself
+  const [audioIdx, setAudioIdx] = useState(0);
+  const resumeAtRef = useRef(0);
   useBodyScrollLock();
+
+  function pickLanguage(language) {
+    const vEl = videoRef.current;
+    if (vEl && !isLive && vEl.currentTime > 1) resumeAtRef.current = vEl.currentTime; // keep my place in movies
+    setLangPick(language);
+    try { localStorage.setItem(`streamx_langpick_${content?.id}`, language); } catch (e) {}
+  }
+  function pickAudio(i) {
+    if (hlsRef.current) { hlsRef.current.audioTrack = i; setAudioIdx(i); }
+  }
 
   // If the admin changes this title's stream URL while it is open, reload it
   // automatically instead of staying stuck on the old (broken) one.
@@ -378,9 +410,18 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         hlsRef.current = hls;
         hls.loadSource(streamUrl);
         hls.attachMedia(v);
+        setAudioTracks([]); setAudioIdx(0);
+        const syncAudio = () => {
+          const t = hls.audioTracks || [];
+          setAudioTracks(t.map((x, i) => ({ i, label: x.name || x.lang || `Audio ${i + 1}` })));
+          setAudioIdx(hls.audioTrack);
+        };
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudio);
+        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => setAudioIdx(hls.audioTrack));
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           v.volume = volume;
-          if (user?.id && content?.id) {
+          if (resumeAtRef.current > 0 && !isLive) { v.currentTime = resumeAtRef.current; resumeAtRef.current = 0; }
+          else if (user?.id && content?.id) {
             db.getProgress(user.id, content.id).then(sec => { if (sec > 5) { v.currentTime = sec; showToast("Resumed from " + fmt(sec)); } }).catch(() => {});
           }
           v.play().catch(() => {}); setPlaying(true); resetHide();
@@ -769,6 +810,33 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
             ].filter(Boolean).join(" • ")}
           </div>
         </div>
+
+        {/* Language / audio switcher — only when the title really has several */}
+        {(langOptions.length > 1 || audioTracks.length > 1) && (() => {
+          const pill = (label, active, onClick, key) => (
+            <button key={key} onClick={onClick} style={{ background: active ? "#e50914" : "#16161c", color: active ? "#fff" : "#bbb", border: `1px solid ${active ? "#e50914" : "#2a2a34"}`, borderRadius: 20, padding: "6px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{label}</button>
+          );
+          return (
+            <div style={{ padding: "16px clamp(14px,3vw,20px) 0" }}>
+              {langOptions.length > 1 && (
+                <>
+                  <div style={{ fontSize: 11, color: "#777", letterSpacing: .6, marginBottom: 8 }}>🌐 LANGUAGE</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                    {langOptions.map(o => pill(o.language, (picked?.language || langOptions[0].language) === o.language, () => pickLanguage(o.language), o.language))}
+                  </div>
+                </>
+              )}
+              {audioTracks.length > 1 && (
+                <>
+                  <div style={{ fontSize: 11, color: "#777", letterSpacing: .6, marginBottom: 8 }}>🎧 AUDIO</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {audioTracks.map(t => pill(t.label, t.i === audioIdx, () => pickAudio(t.i), "a" + t.i))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 4 icon buttons — plain row like screenshot */}
         <div style={{ display:"flex", padding:"18px 0 6px" }}>

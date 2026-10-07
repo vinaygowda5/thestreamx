@@ -298,6 +298,41 @@ function DonutChart({data,size=120,title}){
   );
 }
 
+
+// ── Extra languages (one channel, several language streams) ─────────
+function LanguageStreamsEditor({value,onChange,primaryLanguage}){
+  const rows=Array.isArray(value)?value:[];
+  const used=new Set([primaryLanguage,...rows.map(r=>r.language)]);
+  const free=LANGS.filter(l=>!used.has(l));
+  const setRow=(i,patch)=>onChange(rows.map((r,j)=>j===i?{...r,...patch}:r));
+  const okUrl=u=>/^https?:\/\/\S+\.\S+/i.test((u||"").trim());
+  return(
+    <div style={{marginTop:14,padding:14,border:"1px solid #181828",borderRadius:12,background:"#07071a"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#e2e2f0",marginBottom:4}}>🌐 Other languages <span style={{color:"#3a3a5a",fontWeight:500}}>(optional)</span></div>
+      <div style={{fontSize:11,color:"#5a5a7a",lineHeight:1.6,marginBottom:10}}>
+        The main link above plays in <b style={{color:"#e2e2f0"}}>{primaryLanguage}</b>. To offer the same channel in more languages, add one link per language here. Viewers get a language switcher under the player.
+        If ONE link already contains several audio languages (HLS multi-audio), you don't need to add anything: the player detects them automatically.
+      </div>
+      {rows.map((r,i)=>(
+        <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <select className="inp" style={{flex:"0 0 140px"}} value={r.language||""} onChange={e=>setRow(i,{language:e.target.value})}>
+            <option value="">Language…</option>
+            {[r.language,...free].filter(Boolean).filter((l,j,arr)=>arr.indexOf(l)===j).map(l=><option key={l} value={l}>{l}</option>)}
+          </select>
+          <div style={{flex:"1 1 220px",minWidth:0}}>
+            <input className="inp" value={r.url||""} onChange={e=>setRow(i,{url:e.target.value})} placeholder="https://example.com/live/kannada.m3u8"/>
+            {r.url&&!okUrl(r.url)&&<div style={{fontSize:10.5,color:R,marginTop:4}}>Not a valid link. Must start with https://</div>}
+          </div>
+          <button type="button" onClick={()=>onChange(rows.filter((_,j)=>j!==i))} style={{background:"rgba(229,9,20,.1)",border:"1px solid rgba(229,9,20,.3)",color:R,borderRadius:8,padding:"9px 12px",cursor:"pointer",fontSize:12}}>✕</button>
+        </div>
+      ))}
+      {free.length>0&&rows.length<11&&(
+        <button type="button" onClick={()=>onChange([...rows,{language:free[0],url:""}])} style={{background:"transparent",border:"1px dashed #2a2a4a",color:"#8a8ab0",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12}}>＋ Add another language</button>
+      )}
+    </div>
+  );
+}
+
 // ── STREAM PREVIEW ────────────────────────────────────────
 function StreamPreview({url,isLive=false}){
   const vRef=useRef(null);
@@ -652,6 +687,9 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
         </div>
       )}
 
+      {/* Other languages */}
+      <LanguageStreamsEditor value={form.language_streams} onChange={v=>set("language_streams",v)} primaryLanguage={form.language}/>
+
       {/* Tags */}
       <Field label="Tags (press Enter)" hint="e.g. 4K, HDR, DOLBY, NEW, EXCLUSIVE, SUBTITLE">
         <input className="inp" value={tagInput} onChange={e=>setTagInput(e.target.value)} onKeyDown={addTag} placeholder="Type and press Enter..."/>
@@ -710,6 +748,22 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
     if((isLiveList||form.is_live||form.type==="Live")&&!link){showToast("Please paste the live stream URL (https://...)","err");return;}
     if(link&&!validUrl){showToast("That is not a valid link. It must start with https://","err");return;}
     if(isLiveList){form.type="Live";form.is_live=true;}
+    // Extra languages: drop empty rows, validate the rest
+    const hadLangs=Array.isArray(modal?.language_streams)&&modal.language_streams.length>0;
+    const rowsIn=Array.isArray(form.language_streams)?form.language_streams:[];
+    const rows=rowsIn.map(r=>({language:(r.language||"").trim(),url:(r.url||"").trim()})).filter(r=>r.language||r.url);
+    for(const r of rows){
+      if(!r.language){showToast("Choose a language for each extra link","err");return;}
+      if(!/^https?:\/\/\S+\.\S+/i.test(r.url)){showToast(`Extra language ${r.language}: paste a valid https:// link`,"err");return;}
+      if(r.language===form.language){showToast(`${r.language} is already the main language. Pick a different one`,"err");return;}
+    }
+    if(new Set(rows.map(r=>r.language)).size!==rows.length){showToast("Each extra language can only be added once","err");return;}
+    if(rows.length||hadLangs)form.language_streams=rows;else delete form.language_streams; // keeps working before the database column exists
+    // One link = one channel (languages go in "Other languages", not duplicate channels)
+    if(link){
+      const same=(content||[]).find(c=>c.id!==modal?.id&&!c.deleted_at&&((c.stream_url||"").trim().toLowerCase()===link.toLowerCase()));
+      if(same){showToast(`This link is already used by "${same.title}". Edit that one, or add other languages inside it.`,"err");return;}
+    }
     setSaving(true);
     try{
       if(modal?.id){
@@ -719,7 +773,11 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
       }else{
         const row=await db.addContent(form);
         if(!row||!row.id)throw new Error("The server did not confirm the save. Please try again.");
-        showToast((isLiveList?"✓ Channel added: ":"✓ Added: ")+form.title+(form.is_active?" (visible on Home)":" (hidden)"));
+        // Verify the way a VIEWER sees it (public access), so "Added" is never a guess
+        let visible=false;
+        try{const{data:pub}=await supabase.from("content").select("id").eq("id",row.id).eq("is_active",true).maybeSingle();visible=!!pub;}catch(e){}
+        if(visible)showToast((isLiveList?"✓ Channel added: ":"✓ Added: ")+form.title+". Visible on Home now");
+        else showToast(`"${form.title}" saved, but viewers can't see it yet. Make sure Status is ON (not Hidden) and check the database access rules.`,"warn");
         if(onLocalAdd)onLocalAdd(row);
       }
       setModal(null);onRefresh(true);

@@ -94,6 +94,7 @@ function Card({ item, onPlay }) {
       <div style={{height:"clamp(88px,17vw,105px)",position:"relative",overflow:"hidden",background:item.thumbnail?`url(${item.thumbnail}) center/cover no-repeat`:`linear-gradient(135deg,${color}22,#0a0a0f)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
         {!item.thumbnail && <span style={{fontSize:"clamp(30px,7vw,42px)"}}>{emoji}</span>}
         {isLive && <div style={{position:"absolute",top:6,left:6,background:"#e50914",color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:3,letterSpacing:2,animation:"pulse 1.5s infinite"}}>● LIVE</div>}
+        {Array.isArray(item.language_streams) && item.language_streams.length > 0 && <div style={{position:"absolute",bottom:6,left:6,background:"rgba(0,0,0,.75)",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3}}>🌐 {item.language_streams.length + 1} languages</div>}
         {item.is_premium && !isLive && <div style={{position:"absolute",top:6,right:6,background:"rgba(229,9,20,.9)",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3}}>PRO</div>}
         {hov && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:38,height:38,borderRadius:"50%",background:color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:900}}>▶</div></div>}
       </div>

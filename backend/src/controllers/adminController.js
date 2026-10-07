@@ -93,6 +93,19 @@ function cleanBody(body, protectedFields) {
   const out = {};
   for (const [k, v] of Object.entries(body)) {
     if (protectedFields.includes(k) || k === "__proto__" || k === "constructor") continue;
+    if (k === "language_streams") {
+      // [{ language, url }] — one stream link per extra language
+      if (!Array.isArray(v) || v.length > 12) return { error: "language_streams must be a list of up to 12 items" };
+      const seen = new Set(); const rows = [];
+      for (const r of v) {
+        const language = String(r?.language || "").trim(); const url = String(r?.url || "").trim();
+        if (!language || language.length > 30) return { error: "Each extra language needs a name" };
+        if (!isHttpUrl(url)) return { error: `Extra language "${language}" needs a valid http(s) link` };
+        if (seen.has(language.toLowerCase())) return { error: `Language "${language}" is listed twice` };
+        seen.add(language.toLowerCase()); rows.push({ language, url });
+      }
+      out[k] = rows; continue;
+    }
     if (typeof v === "string") {
       const t = v.trim();
       if (t.length > 5000) return { error: `Field "${k}" is too long` };
@@ -110,6 +123,13 @@ async function getAllContent(req, res) {
   return ok(res, q.data || []);
 }
 
+// One link = one channel. (Several languages go inside language_streams.)
+async function findDuplicateLink(url, exceptId) {
+  if (!url) return null;
+  const { data } = await sb.from("content").select("id,title,deleted_at,stream_url").eq("stream_url", url).limit(5);
+  return (data || []).find(r => !r.deleted_at && String(r.id) !== String(exceptId)) || null;
+}
+
 async function addContent(req, res) {
   const c = cleanBody(req.body, PROTECTED_CONTENT);
   if (c.error) return err(res, c.error);
@@ -117,6 +137,8 @@ async function addContent(req, res) {
   if ((c.data.is_live || c.data.type === "Live") && !isHttpUrl(c.data.stream_url || c.data.embed_url)) {
     return err(res, "A live channel needs a valid stream URL (https://...)");
   }
+  const dup = await findDuplicateLink(c.data.stream_url, null);
+  if (dup) return err(res, `This link is already used by "${dup.title}". Edit that one, or add other languages inside it.`);
   const { data, error } = await sb.from("content").insert(c.data).select().single();
   if (error) return err(res, error.message);
   logAudit({ req, action: "ADD_CONTENT", resourceType: "content", resourceId: data.id, after: { title: data.title, type: data.type } });
@@ -126,6 +148,8 @@ async function addContent(req, res) {
 async function updateContent(req, res) {
   const c = cleanBody(req.body, PROTECTED_CONTENT);
   if (c.error) return err(res, c.error);
+  const dup = await findDuplicateLink(c.data.stream_url, req.params.id);
+  if (dup) return err(res, `This link is already used by "${dup.title}".`);
   const { data, error } = await sb.from("content").update(c.data).eq("id", req.params.id).select().single();
   if (error) return err(res, error.message);
   logAudit({ req, action: "UPDATE_CONTENT", resourceType: "content", resourceId: req.params.id, after: { fields: Object.keys(c.data) } });
