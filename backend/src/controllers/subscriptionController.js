@@ -9,10 +9,10 @@ const razorpay = new Razorpay({
 });
 
 const PLANS = {
-  plan_mobile:  { name:"Mobile",  amount: 14900,  months: 1  },
-  plan_basic:   { name:"Basic",   amount: 29900,  months: 1  },
-  plan_premium: { name:"Premium", amount: 49900,  months: 1  },
-  plan_annual:  { name:"Annual",  amount: 99900,  months: 12 },
+  plan_mobile:  { name:"Mobile",  amount: 99,  months: 1  },
+  plan_basic:   { name:"Basic",   amount: 149,  months: 1  },
+  plan_premium: { name:"Premium", amount: 249,  months: 1  },
+  plan_annual:  { name:"Annual",  amount: 2499,  months: 12 },
 };
 
 // Create Razorpay order

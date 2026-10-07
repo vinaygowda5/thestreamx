@@ -457,7 +457,7 @@ export default function Login({onLogin,onEmployeeLogin}){
             <div style={{background:"rgba(229,9,20,.06)",border:"1px solid rgba(229,9,20,.15)",borderRadius:10,padding:"12px",marginBottom:10}}>
               <div style={{fontSize:11,fontWeight:700,color:"#e50914",marginBottom:6}}>👑 Need more screens? Upgrade!</div>
               <div style={{display:"flex",gap:6}}>
-                {[{p:"Basic",pr:"₹299",d:"2 devices"},{p:"Premium",pr:"₹499",d:"4 devices"}].map(x=>(
+                {[{p:"Basic",pr:"₹149",d:"2 devices"},{p:"Premium",pr:"₹249",d:"4 devices"}].map(x=>(
                   <div key={x.p} style={{flex:1,background:"rgba(255,255,255,.04)",borderRadius:7,padding:"7px",textAlign:"center"}}>
                     <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{x.p}</div>
                     <div style={{fontSize:12,color:"#e50914",fontWeight:800}}>{x.pr}<span style={{fontSize:9,color:"#555",fontWeight:400}}>/mo</span></div>

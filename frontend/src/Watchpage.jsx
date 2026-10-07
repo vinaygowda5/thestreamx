@@ -299,7 +299,7 @@ export default function WatchPage({ content, user, onBack, onUpgrade }) {
               <div style={{fontSize:12,color:"#888"}}>Subscribe to StreamX Premium to watch this content in 4K HDR</div>
             </div>
             <button onClick={onUpgrade} style={{background:RED,color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Inter',sans-serif"}}>
-              Upgrade ₹499
+              Upgrade ₹249
             </button>
           </div>
         )}
