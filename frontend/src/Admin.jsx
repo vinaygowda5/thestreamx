@@ -302,18 +302,21 @@ function DonutChart({data,size=120,title}){
 function StreamPreview({url,isLive=false}){
   const vRef=useRef(null);
   const[st,setSt]=useState("loading");
+  const[errMsg,setErrMsg]=useState("");
   const isYT=url?.includes("youtube.com")||url?.includes("youtu.be");
   const isM3U8=url?.includes(".m3u8");
   function toEmbed(u){try{if(u.includes("watch?v="))return`https://www.youtube.com/embed/${new URL(u).searchParams.get("v")}?autoplay=1&mute=1`;if(u.includes("youtu.be/"))return`https://www.youtube.com/embed/${u.split("youtu.be/")[1]?.split("?")[0]}?autoplay=1&mute=1`;}catch(e){}return u;}
   useEffect(()=>{
     if(!url||isYT)return;
     const v=vRef.current;if(!v)return;
-    setSt("loading");
+    setSt("loading");setErrMsg("");
+    if(!/^https?:\/\//i.test(url)){setSt("error");setErrMsg("not a valid URL. It must start with https://");return;}
+    if(window.location.protocol==="https:"&&/^http:\/\//i.test(url)){setSt("error");setErrMsg("http:// links are blocked on a secure site. Use https://");return;}
     let hls;
     if(!isM3U8){
       v.src=url; v.muted=true; v.load();
       const onCanPlay=()=>setSt("playing");
-      const onErr=()=>setSt("error");
+      const onErr=()=>{setSt("error");setErrMsg("the video file could not be loaded");};
       v.addEventListener("canplay",onCanPlay);
       v.addEventListener("loadeddata",onCanPlay);
       v.addEventListener("error",onErr);
@@ -322,23 +325,23 @@ function StreamPreview({url,isLive=false}){
     }
     try{
       if(Hls.isSupported()){
-        hls=new Hls({enableWorker:true,lowLatencyMode:true});
+        hls=new Hls({enableWorker:true});
         hls.loadSource(url);hls.attachMedia(v);
         hls.on(Hls.Events.MANIFEST_PARSED,()=>{v.muted=true;v.play().catch(()=>{});setSt("playing");});
-        hls.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal)setSt("error");});
+        hls.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal){setSt("error");const c=d.response?.code;setErrMsg((c===404?"stream not found (404), it may be offline or the URL is wrong":(c===401||c===403)?"access denied ("+c+")":/LoadError|Timeout/.test(d.details||"")?"could not reach the stream, it may be offline or block other websites (CORS)":"unsupported or broken stream")+" ["+(d.details||d.type)+(c?" "+c:"")+"]");}});
       }else{v.src=url;v.muted=true;v.play().catch(()=>{});setSt("playing");}
     }catch(e){setSt("error");}
     return()=>{if(hls){hls.destroy();}};
   },[url]);
   const stColor=st==="playing"?GR:AM;
-  const stLabel=st==="playing"?"✓ Stream working":st==="error"?"⚠ Preview blocked — URL is saved and will work in the app":"Connecting...";
+  const stLabel=st==="playing"?"✓ Stream working":st==="error"?"⚠ Preview can't play this: "+errMsg:"Connecting...";
   return(
     <div style={{borderRadius:12,overflow:"hidden",background:"#000",border:"1px solid #181828",marginTop:12}}>
       <div style={{paddingTop:"56.25%",position:"relative"}}>
         {isYT?<iframe src={toEmbed(url)} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="autoplay;encrypted-media" allowFullScreen/>
-        :<><video ref={vRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"contain"}} playsInline muted autoPlay controls crossOrigin="anonymous"/>
+        :<><video ref={vRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"contain"}} playsInline muted autoPlay controls/>
           {st==="loading"&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.8)",pointerEvents:"none"}}><div style={{width:36,height:36,border:`2px solid #181828`,borderTop:`2px solid ${R}`,borderRadius:"50%",animation:"spin .8s linear infinite"}}/></div>}
-          {st==="error"&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.92)",flexDirection:"column",gap:10,pointerEvents:"none",padding:"0 20px"}}><span style={{fontSize:28}}>⚠️</span><div style={{fontSize:12,color:AM,textAlign:"center"}}>Preview blocked by browser — URL is saved correctly and will play in the app</div></div>}
+          {st==="error"&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.92)",flexDirection:"column",gap:10,pointerEvents:"none",padding:"0 20px"}}><span style={{fontSize:28}}>⚠️</span><div style={{fontSize:12,color:AM,textAlign:"center"}}>Can't play this stream{errMsg?": "+errMsg:""}</div></div>}
         </>}
         {isLive&&<div style={{position:"absolute",top:10,left:10,background:R,color:"#fff",fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:4,letterSpacing:2,animation:"pulse 1.5s infinite",zIndex:5}}>● LIVE</div>}
       </div>
@@ -476,11 +479,15 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
             <Field label={isLiveForm?"HLS Live Stream URL":"Direct Video URL"} hint="HLS .m3u8 · MP4 direct link · DASH .mpd · RTMP streams">
               <input className="inp" value={form.stream_url} onChange={e=>onUrlChange(e.target.value,"stream_url")} placeholder={isLiveForm?"https://example.com/live/stream.m3u8":"https://cdn.example.com/movie.mp4  or  stream.m3u8"}/>
             </Field>
-            {form.stream_url&&form.stream_url.length>10&&(
-              <div style={{fontSize:11,color:GR,padding:"7px 12px",background:"rgba(0,200,83,.06)",borderRadius:8,wordBreak:"break-all",border:"1px solid rgba(0,200,83,.15)"}}>
-                ✓ URL saved: {form.stream_url.slice(0,80)}{form.stream_url.length>80?"...":""}
-              </div>
-            )}
+            {form.stream_url&&form.stream_url.trim().length>0&&(()=>{
+              const u=form.stream_url.trim();
+              const ok=/^https?:\/\/\S+\.\S+/i.test(u);
+              const http=/^http:\/\//i.test(u);
+              const bad=!ok, c=bad?R:http?AM:GR;
+              return <div style={{fontSize:11,color:c,padding:"7px 12px",background:bad?"rgba(229,9,20,.07)":http?"rgba(255,170,0,.07)":"rgba(0,200,83,.06)",borderRadius:8,wordBreak:"break-all",border:`1px solid ${bad?"rgba(229,9,20,.25)":http?"rgba(255,170,0,.25)":"rgba(0,200,83,.15)"}`}}>
+                {bad?"✗ Not a valid link. Paste a full URL starting with https:// (for example https://example.com/live/stream.m3u8)":http?"⚠ http:// links are blocked by browsers on a secure site. Use an https:// link.":"✓ Looks like a valid URL (check the preview below, then press Save)"}
+              </div>;
+            })()}
           </div>
         )}
 
@@ -684,7 +691,7 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
 }
 
 // ── CONTENT LIST ──────────────────────────────────────────
-function ContentList({content,isLiveList=false,onRefresh,showToast}){
+function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
   const[modal,  setModal]  =useState(null);
   const[search, setSearch] =useState("");
   const[saving, setSaving] =useState(false);
@@ -696,8 +703,27 @@ function ContentList({content,isLiveList=false,onRefresh,showToast}){
     return ms&&mf;
   });
   async function handleSave(form){
+    form={...form,title:(form.title||"").trim(),stream_url:(form.stream_url||"").trim(),embed_url:(form.embed_url||"").trim()};
+    const link=form.stream_url||form.embed_url;
+    const validUrl=/^https?:\/\/\S+\.\S+/i.test(link);
+    if(!form.title){showToast("Please enter a title first","err");return;}
+    if((isLiveList||form.is_live||form.type==="Live")&&!link){showToast("Please paste the live stream URL (https://...)","err");return;}
+    if(link&&!validUrl){showToast("That is not a valid link. It must start with https://","err");return;}
+    if(isLiveList){form.type="Live";form.is_live=true;}
     setSaving(true);
-    try{if(modal?.id){await db.updateContent(modal.id,form);showToast("Content updated!");}else{await db.addContent(form);showToast("✓ Added! Now live on home page.");}setModal(null);onRefresh();}
+    try{
+      if(modal?.id){
+        const row=await db.updateContent(modal.id,form);
+        showToast("Updated: "+form.title);
+        if(row&&onLocalAdd)onLocalAdd(row);
+      }else{
+        const row=await db.addContent(form);
+        if(!row||!row.id)throw new Error("The server did not confirm the save. Please try again.");
+        showToast((isLiveList?"✓ Channel added: ":"✓ Added: ")+form.title+(form.is_active?" (visible on Home)":" (hidden)"));
+        if(onLocalAdd)onLocalAdd(row);
+      }
+      setModal(null);onRefresh(true);
+    }
     catch(e){showToast("Error: "+e.message,"err");}
     setSaving(false);
   }
@@ -708,7 +734,7 @@ function ContentList({content,isLiveList=false,onRefresh,showToast}){
       const json=await res.json();
       if(!json.success)throw new Error(json.msg);
       showToast(json.msg||"Deleted: "+c.title);
-      setConfirm(null);onRefresh();
+      setConfirm(null);onRefresh(true);
     }catch(e){showToast("Delete failed: "+e.message,"err");}
   }
   return(
@@ -783,8 +809,8 @@ function ContentList({content,isLiveList=false,onRefresh,showToast}){
                     <td>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                         <Btn onClick={()=>setModal(c)} variant="outline" color={BL} size="sm">Edit</Btn>
-                        <Btn onClick={async()=>{await db.updateContent(c.id,{is_featured:!c.is_featured});showToast(c.is_featured?"Removed from featured":"⭐ Featured!");onRefresh();}} variant="outline" color={AM} size="sm">{c.is_featured?"★":"☆"}</Btn>
-                        <Btn onClick={async()=>{await db.updateContent(c.id,{is_active:!c.is_active});showToast(c.is_active?"Hidden":"✓ Visible!");onRefresh();}} variant="outline" color={c.is_active?R:GR} size="sm">{c.is_active?"Hide":"Show"}</Btn>
+                        <Btn onClick={async()=>{await db.updateContent(c.id,{is_featured:!c.is_featured});showToast(c.is_featured?"Removed from featured":"⭐ Featured!");onRefresh(true);}} variant="outline" color={AM} size="sm">{c.is_featured?"★":"☆"}</Btn>
+                        <Btn onClick={async()=>{await db.updateContent(c.id,{is_active:!c.is_active});showToast(c.is_active?"Hidden":"✓ Visible!");onRefresh(true);}} variant="outline" color={c.is_active?R:GR} size="sm">{c.is_active?"Hide":"Show"}</Btn>
                         <Btn onClick={()=>setConfirm(c)} variant="danger" size="sm">Del</Btn>
                       </div>
                     </td>
@@ -1654,14 +1680,14 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
   useEffect(()=>{
     if(!verified)return;
     const ch=supabase.channel("admin-pro-rt")
-      .on("postgres_changes",{event:"*",schema:"public",table:"content"},()=>loadData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"users"},()=>loadData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"content"},()=>loadData(true))
+      .on("postgres_changes",{event:"*",schema:"public",table:"users"},()=>loadData(true))
       .subscribe();
     return()=>supabase.removeChannel(ch);
   },[verified]);
 
-  async function loadData(){
-    setLoading(true);
+  async function loadData(silent){
+    if(!silent)setLoading(true);
     try{
       // Real stats + real revenue now come from the backend (JWT-authorized,
       // works for any logged-in employee role, not just the legacy admin
@@ -1671,7 +1697,9 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
       const[s,rev,c,u,a]=await Promise.all([
         fetchJson(`${API}/api/admin/stats`),
         fetchJson(`${API}/api/admin/revenue-analytics`),
-        supabase.from("content").select("*").order("created_at",{ascending:false}).then(r=>r.data||[]),
+        // Read through the backend (service role) so every row is listed, including
+        // hidden/new ones that browser-side row-level security may not return.
+        fetchJson(`${API}/api/admin/content`).then(r=>Array.isArray(r)?r:supabase.from("content").select("*").order("created_at",{ascending:false}).then(x=>x.data||[])),
         db.getAllUsers().catch(()=>[]),
         db.getAllAds().catch(()=>[]),
       ]);
@@ -1880,8 +1908,8 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
             </div>
           )}
 
-          {page==="content"   &&<ContentList content={movieContent} isLiveList={false} onRefresh={loadData} showToast={showToast}/>}
-          {page==="live"      &&<ContentList content={liveContent}  isLiveList={true}  onRefresh={loadData} showToast={showToast}/>}
+          {page==="content"   &&<ContentList onLocalAdd={r=>setContent(c=>[r,...c.filter(x=>x.id!==r.id)])} content={movieContent} isLiveList={false} onRefresh={loadData} showToast={showToast}/>}
+          {page==="live"      &&<ContentList onLocalAdd={r=>setContent(c=>[r,...c.filter(x=>x.id!==r.id)])} content={liveContent}  isLiveList={true}  onRefresh={loadData} showToast={showToast}/>}
           {page==="analytics" &&<AnalyticsPage stats={stats} content={content} users={users}/>}
           {page==="users"     &&<UsersPage users={users} onRefresh={loadData} showToast={showToast}/>}
           {page==="ads"       &&<AdsPage ads={ads} onRefresh={loadData} showToast={showToast}/>}
