@@ -109,7 +109,37 @@ function visiblePages(employeeRole, legacyIsAdmin){
 
 const TYPES  =["Movie","Web Series","Documentary","Short Film","Kids","Anime","Reality Show"];
 const GENRES =["Action","Drama","Sci-Fi","Thriller","Comedy","Romance","Kids","Cricket","Football","Racing","News","Documentary","Nature","Horror","Sports","Music","Reality","Anime","Devotional"];
-const LANGS  =["Hindi","English","Kannada","Tamil","Telugu","Bengali","Malayalam","Punjabi","Marathi","Gujarati","Bhojpuri","Odia","Urdu","Sanskrit"];
+const LANGS  =["English","Kannada","Tamil","Telugu","Malayalam","Hindi"];
+const LIVE_CATS=["Sports","News","Kids","Entertainment","Movie","Short Movie","Series"];
+
+// ── schedule helpers (start / expiry) ──
+function toLocalInput(iso){
+  if(!iso)return "";const d=new Date(iso);if(isNaN(d))return "";
+  const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fromLocalInput(v){if(!v)return null;const d=new Date(v);return isNaN(d)?null:d.toISOString();}
+function liveState(c){
+  const now=Date.now();
+  if(c.ends_at&&Date.parse(c.ends_at)<=now)return "ended";
+  if(c.starts_at&&Date.parse(c.starts_at)>now)return "upcoming";
+  return c.is_active?"live":"off";
+}
+const fShort=iso=>iso?new Date(iso).toLocaleString([], {day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}):"";
+
+function ScheduleFields({form,set}){
+  return(
+    <div style={{marginTop:14,padding:14,border:"1px solid #181828",borderRadius:12,background:"#07071a"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#e2e2f0",marginBottom:4}}>🕒 Schedule <span style={{color:"#3a3a5a",fontWeight:500}}>(optional)</span></div>
+      <div style={{fontSize:11,color:"#5a5a7a",lineHeight:1.6,marginBottom:10}}>Leave both empty to go live right away and stay until you hide it. With a start time the channel shows as "Upcoming" and opens at that time. After the expiry time it disappears from the app automatically. Times use this computer's time zone.</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12}}>
+        <Field label="Start date & time"><input type="datetime-local" className="inp" value={toLocalInput(form.starts_at)} onChange={e=>set("starts_at",fromLocalInput(e.target.value))}/></Field>
+        <Field label="Expiry date & time"><input type="datetime-local" className="inp" value={toLocalInput(form.ends_at)} onChange={e=>set("ends_at",fromLocalInput(e.target.value))}/></Field>
+      </div>
+      {(form.starts_at||form.ends_at)&&<button type="button" onClick={()=>{set("starts_at",null);set("ends_at",null);}} style={{marginTop:8,background:"transparent",border:"none",color:"#8a8ab0",cursor:"pointer",fontSize:12,textDecoration:"underline"}}>Clear schedule</button>}
+    </div>
+  );
+}
 const RATINGS=["U","U/A","U/A 7+","U/A 13+","U/A 16+","A"];
 
 const fN=n=>n>=1e7?(n/1e7).toFixed(1)+"Cr":n>=1e5?(n/1e5).toFixed(1)+"L":n>=1e3?(n/1e3).toFixed(1)+"K":String(n||0);
@@ -486,7 +516,7 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
         </Field>
         {!isLiveForm
           ?<Field label="Content Type"><select className="inp" value={form.type} onChange={e=>set("type",e.target.value)}>{TYPES.map(t=><option key={t}>{t}</option>)}</select></Field>
-          :<Field label="Category"><select className="inp" value={form.genre} onChange={e=>set("genre",e.target.value)}>{["Cricket","Football","News","Racing","Kids","Music","General","Entertainment","Devotional"].map(g=><option key={g}>{g}</option>)}</select></Field>
+          :<Field label="Category"><select className="inp" value={form.genre} onChange={e=>set("genre",e.target.value)}>{[...LIVE_CATS,...(form.genre&&!LIVE_CATS.includes(form.genre)?[form.genre]:[])].map(g=><option key={g}>{g}</option>)}</select></Field>
         }
       </div>
 
@@ -667,13 +697,13 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
       {!isLiveForm&&(
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
           <Field label="Genre"><select className="inp" value={form.genre} onChange={e=>set("genre",e.target.value)}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></Field>
-          <Field label="Language"><select className="inp" value={form.language} onChange={e=>set("language",e.target.value)}>{LANGS.map(l=><option key={l}>{l}</option>)}</select></Field>
+          <Field label="Language"><select className="inp" value={form.language} onChange={e=>set("language",e.target.value)}>{[...LANGS,...(form.language&&!LANGS.includes(form.language)?[form.language]:[])].map(l=><option key={l}>{l}</option>)}</select></Field>
           <Field label="Rating"><select className="inp" value={form.rating} onChange={e=>set("rating",e.target.value)}>{RATINGS.map(r=><option key={r}>{r}</option>)}</select></Field>
         </div>
       )}
       {isLiveForm&&(
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <Field label="Language"><select className="inp" value={form.language} onChange={e=>set("language",e.target.value)}>{LANGS.map(l=><option key={l}>{l}</option>)}</select></Field>
+          <Field label="Language"><select className="inp" value={form.language} onChange={e=>set("language",e.target.value)}>{[...LANGS,...(form.language&&!LANGS.includes(form.language)?[form.language]:[])].map(l=><option key={l}>{l}</option>)}</select></Field>
           <Field label="Rating"><select className="inp" value={form.rating} onChange={e=>set("rating",e.target.value)}>{RATINGS.map(r=><option key={r}>{r}</option>)}</select></Field>
         </div>
       )}
@@ -689,6 +719,8 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
 
       {/* Other languages */}
       <LanguageStreamsEditor value={form.language_streams} onChange={v=>set("language_streams",v)} primaryLanguage={form.language}/>
+
+      <ScheduleFields form={form} set={set}/>
 
       {/* Tags */}
       <Field label="Tags (press Enter)" hint="e.g. 4K, HDR, DOLBY, NEW, EXCLUSIVE, SUBTITLE">
@@ -759,6 +791,9 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
     }
     if(new Set(rows.map(r=>r.language)).size!==rows.length){showToast("Each extra language can only be added once","err");return;}
     if(rows.length||hadLangs)form.language_streams=rows;else delete form.language_streams; // keeps working before the database column exists
+    // Schedule: only send start/expiry when used (works before the SQL column step too)
+    for(const k of ["starts_at","ends_at"]){ if(!form[k]){ if(modal&&modal[k])form[k]=null;else delete form[k]; } }
+    if(form.starts_at&&form.ends_at&&Date.parse(form.ends_at)<=Date.parse(form.starts_at)){showToast("Expiry must be after the start time","err");return;}
     // One link = one channel (languages go in "Other languages", not duplicate channels)
     if(link){
       const same=(content||[]).find(c=>c.id!==modal?.id&&!c.deleted_at&&((c.stream_url||"").trim().toLowerCase()===link.toLowerCase()));
@@ -788,6 +823,12 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
     catch(e){showToast("Error: "+e.message,"err");}
     setSaving(false);
   }
+  async function endLive(c){
+    if(!window.confirm(`End "${c.title}" now?\n\nViewers will see "Live ended" and it disappears from Home. You can restart it later with Edit.`))return;
+    try{await db.updateContent(c.id,{ends_at:new Date().toISOString()});showToast("Live ended: "+c.title);onRefresh(true);}
+    catch(e){showToast("Could not end live: "+e.message+" (run SCHEDULE_AND_LIVE.sql once)","err");}
+  }
+
   async function realDelete(c){
     try{
       const token=localStorage.getItem("streamx_token");
@@ -856,10 +897,13 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
                     <td>
                       <Chip label={c.type||"Movie"} color={BL}/>
                       <div style={{fontSize:10,color:"#3a3a5a",marginTop:3}}>{c.genre} · {c.language}</div>
+                      {(c.starts_at||c.ends_at)&&<div style={{fontSize:10,color:"#5a5a7a",marginTop:2}}>🕒 {c.starts_at?fShort(c.starts_at):"now"} → {c.ends_at?fShort(c.ends_at):"until hidden"}</div>}
                     </td>
                     <td>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        <Chip label={c.is_active?"LIVE":"OFF"} color={c.is_active?GR:"#3a3a5a"}/>
+                        {(()=>{const isL=c.is_live||c.type==="Live";const s=liveState(c);
+                          if(!isL)return <Chip label={c.is_active?"ACTIVE":"OFF"} color={c.is_active?GR:"#3a3a5a"}/>;
+                          return <Chip label={s==="live"?"LIVE":s==="ended"?"ENDED":s==="upcoming"?"UPCOMING":"OFF"} color={s==="live"?GR:s==="upcoming"?AM:s==="ended"?R:"#3a3a5a"}/>;})()}
                         {c.is_featured&&<Chip label="⭐" color={AM}/>}
                         {c.is_premium&&<Chip label="👑" color={R}/>}
                         {c.is_live&&<Chip label="🔴" color={R}/>}
@@ -870,6 +914,7 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
                     <td>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                         <Btn onClick={()=>setModal(c)} variant="outline" color={BL} size="sm">Edit</Btn>
+                        {(c.is_live||c.type==="Live")&&liveState(c)==="live"&&<Btn onClick={()=>endLive(c)} variant="outline" color={R} size="sm">End</Btn>}
                         <Btn onClick={async()=>{await db.updateContent(c.id,{is_featured:!c.is_featured});showToast(c.is_featured?"Removed from featured":"⭐ Featured!");onRefresh(true);}} variant="outline" color={AM} size="sm">{c.is_featured?"★":"☆"}</Btn>
                         <Btn onClick={async()=>{await db.updateContent(c.id,{is_active:!c.is_active});showToast(c.is_active?"Hidden":"✓ Visible!");onRefresh(true);}} variant="outline" color={c.is_active?R:GR} size="sm">{c.is_active?"Hide":"Show"}</Btn>
                         <Btn onClick={()=>setConfirm(c)} variant="danger" size="sm">Del</Btn>

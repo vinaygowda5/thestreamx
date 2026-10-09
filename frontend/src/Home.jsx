@@ -1,8 +1,9 @@
 import Footer from "./Footer.jsx";
 import { useState, useEffect, useRef } from "react";
 import { supabase, db } from "./supabase.js";
-import VideoPlayer from "./VideoPlayer.jsx";
-import Search from "./Search.jsx";
+import { lazy, Suspense } from "react";
+const VideoPlayer = lazy(() => import("./VideoPlayer.jsx"));   // loaded only when someone presses play (keeps the first load fast)
+const Search = lazy(() => import("./Search.jsx"));
 import { t } from "./i18n.js";
 
 const GS = `
@@ -41,7 +42,7 @@ const gc = i => GENRE_COLOR[i?.genre] || GENRE_COLOR.default;
 const ge = i => GENRE_EMOJI[i?.genre] || GENRE_EMOJI.default;
 
 /* ── Universal Player ── */
-function UniversalPlayer({ content, user, onClose, onNext }) {
+function UniversalPlayer({ content, user, onClose, onNext, onUpgrade }) {
   if (!content) return null;
   const url = content.embed_url || content.stream_url || "";
   const isYT = url.includes("youtube.com") || url.includes("youtu.be");
@@ -77,7 +78,11 @@ function UniversalPlayer({ content, user, onClose, onNext }) {
   // (e.g. tapping Next Episode) — this is what guarantees the ad system
   // (and HLS, progress tracking, etc.) gets a clean mount/unmount cycle
   // per video instead of silently carrying stale state between titles.
-  return <VideoPlayer key={content?.id} content={content} user={user} onClose={onClose} onNext={onNext}/>;
+  return (
+    <Suspense fallback={<div style={{ position:"fixed", inset:0, zIndex:700, background:"#000" }}/>}>
+      <VideoPlayer key={content?.id} content={content} user={user} onClose={onClose} onNext={onNext} onUpgrade={onUpgrade}/>
+    </Suspense>
+  );
 }
 
 /* ── Content Card ── */
@@ -85,6 +90,7 @@ function Card({ item, onPlay }) {
   const [hov, setHov] = useState(false);
   const color = gc(item), emoji = ge(item);
   const isLive = item.is_live || item.type === "Live";
+  const upcoming = item.starts_at && Date.parse(item.starts_at) > Date.now();
   return (
     <div className="ch"
       onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
@@ -93,7 +99,8 @@ function Card({ item, onPlay }) {
     >
       <div style={{height:"clamp(88px,17vw,105px)",position:"relative",overflow:"hidden",background:item.thumbnail?`url(${item.thumbnail}) center/cover no-repeat`:`linear-gradient(135deg,${color}22,#0a0a0f)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
         {!item.thumbnail && <span style={{fontSize:"clamp(30px,7vw,42px)"}}>{emoji}</span>}
-        {isLive && <div style={{position:"absolute",top:6,left:6,background:"#e50914",color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:3,letterSpacing:2,animation:"pulse 1.5s infinite"}}>● LIVE</div>}
+        {upcoming && <div style={{position:"absolute",top:6,left:6,background:"#f59e0b",color:"#000",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:3}}>⏰ {new Date(item.starts_at).toLocaleString([], {day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}</div>}
+        {isLive && !upcoming && <div style={{position:"absolute",top:6,left:6,background:"#e50914",color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:3,letterSpacing:2,animation:"pulse 1.5s infinite"}}>● LIVE</div>}
         {Array.isArray(item.language_streams) && item.language_streams.length > 0 && <div style={{position:"absolute",bottom:6,left:6,background:"rgba(0,0,0,.75)",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3}}>🌐 {item.language_streams.length + 1} languages</div>}
         {item.is_premium && !isLive && <div style={{position:"absolute",top:6,right:6,background:"rgba(229,9,20,.9)",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:3}}>PRO</div>}
         {hov && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:38,height:38,borderRadius:"50%",background:color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:900}}>▶</div></div>}
@@ -186,8 +193,10 @@ function Empty({ icon, msg }) {
 /* ── Main Home ── */
 export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSupport }) {
   const [cat,        setCat]        = useState("For You");
-  const [content,    setContent]    = useState([]);
-  const [loading,    setLoading]    = useState(true);
+  // Show the last saved list instantly (stale-while-revalidate), then refresh in the background
+  const [content,    setContent]    = useState(() => { try { return JSON.parse(localStorage.getItem("streamx_home_cache_v1") || "[]"); } catch (e) { return []; } });
+  const [loading,    setLoading]    = useState(() => { try { return !localStorage.getItem("streamx_home_cache_v1"); } catch (e) { return true; } });
+  const [nowTick,    setNowTick]    = useState(() => Date.now());
   const [playItem,   setPlayItem]   = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [scrolled,   setScrolled]   = useState(false);
@@ -197,12 +206,13 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
     loadContent();
     // Safety net in case Supabase realtime isn't enabled: quietly refresh
     // every 45s and whenever the tab/app comes back to the foreground.
-    const poll = setInterval(()=>loadContent(true), 45000);
+    const poll = setInterval(()=>{ if(!document.hidden) loadContent(true); }, 90000);
+    const tick = setInterval(()=>setNowTick(Date.now()), 30000);   // hides expired lives / opens started ones
     const onVis = ()=>{ if(!document.hidden) loadContent(true); };
     document.addEventListener("visibilitychange", onVis);
     const fn=()=>setScrolled(window.scrollY>10);
     window.addEventListener("scroll",fn);
-    return()=>{ window.removeEventListener("scroll",fn); clearInterval(poll); document.removeEventListener("visibilitychange",onVis); };
+    return()=>{ window.removeEventListener("scroll",fn); clearInterval(poll); clearInterval(tick); document.removeEventListener("visibilitychange",onVis); };
   },[]);
 
   // Realtime — when admin adds/edits content it shows instantly
@@ -220,8 +230,10 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
         .from("content")
         .select("*")
         .eq("is_active", true)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(150);
       setContent(data || []);
+      try { localStorage.setItem("streamx_home_cache_v1", JSON.stringify((data || []).slice(0, 80))); } catch (e) {}
       // keep an open player in sync with admin edits (type, stream URL, live flag...)
       setPlayItem(p => { if(!p) return p; const f=(data||[]).find(c=>c.id===p.id); return f && JSON.stringify(f)!==JSON.stringify(p) ? f : p; });
 
@@ -241,17 +253,20 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
     setLoading(false);
   }
 
+  // Hide channels whose expiry time has passed
+  const visible = content.filter(c => !(c.ends_at && Date.parse(c.ends_at) <= nowTick));
+
   // Group — only real DB content, NO fake data
   const g = {
-    live:     content.filter(c=>c.is_live||c.type==="Live"),
-    movies:   content.filter(c=>c.type==="Movie"),
-    series:   content.filter(c=>c.type==="Series"),
-    sports:   content.filter(c=>["Cricket","Football","Racing","Kabaddi","Wrestling","Sports"].includes(c.genre)),
-    kids:     content.filter(c=>c.genre==="Kids"),
-    premium:  content.filter(c=>c.is_premium),
-    news:     content.filter(c=>c.genre==="News"),
+    live:     visible.filter(c=>c.is_live||c.type==="Live"),
+    movies:   visible.filter(c=>c.type==="Movie"),
+    series:   visible.filter(c=>c.type==="Series"),
+    sports:   visible.filter(c=>["Cricket","Football","Racing","Kabaddi","Wrestling","Sports"].includes(c.genre)),
+    kids:     visible.filter(c=>c.genre==="Kids"),
+    premium:  visible.filter(c=>c.is_premium),
+    news:     visible.filter(c=>c.genre==="News"),
     trending: [...content].sort((a,b)=>(b.views||0)-(a.views||0)),
-    featured: content.filter(c=>c.is_featured),
+    featured: visible.filter(c=>c.is_featured),
   };
 
   const heroItems = [...g.featured, ...g.live].slice(0,5);
@@ -293,9 +308,10 @@ export default function Home({ onNavigate, user, onUpgrade, onOpenLegal, onSuppo
     <div style={{minHeight:"100vh",background:"#0a0a0f",paddingBottom:"clamp(70px,12vw,88px)"}}>
       <style>{GS}</style>
 
-      {showSearch && <Search onPlay={i=>{setPlayItem(i);setShowSearch(false);}} onClose={()=>setShowSearch(false)} content={content}/>}
+      {showSearch && <Suspense fallback={null}><Search onPlay={i=>{setPlayItem(i);setShowSearch(false);}} onClose={()=>setShowSearch(false)} content={content}/></Suspense>}
       {playItem   && (
     <UniversalPlayer
+      onUpgrade={onUpgrade}
       content={playItem}
       user={user}
       onClose={() => setPlayItem(null)}

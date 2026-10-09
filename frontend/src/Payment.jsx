@@ -25,7 +25,7 @@ const PLANS = [
     noAds:    false,
     color:    "#3b82f6",
     icon:     "📱",
-    features: ["1 Screen", "HD Quality", "Mobile Only"],
+    features: ["1 Screen", "HD Quality", "Mobile"],
   },
   {
     id:       "plan_basic",
@@ -33,11 +33,11 @@ const PLANS = [
     price:    149,
     period:   "month",
     screens:  2,
-    quality:  "HD",
+    quality:  "FHD",
     noAds:    false,
     color:    "#8b5cf6",
     icon:     "⭐",
-    features: ["2 Screens", "HD Quality", "Mobile"],
+    features: ["2 Screens", "Full HD", "Mobile"],
   },
   {
     id:       "plan_premium",
@@ -47,10 +47,10 @@ const PLANS = [
     screens:  4,
     quality:  "4K HDR",
     noAds:    true,
-    color:    "#d40a14",
+    color:    "#e50914",
     icon:     "👑",
     popular:  true,
-    features: ["4 Screens", "4K HDR", "No Ads", "Downloads"],
+    features: ["4 Screens", "4K HDR", "No Ads", "Downloads", "All Devices"],
   },
   {
     id:       "plan_annual",
@@ -161,7 +161,7 @@ export default function Payment({ user, onClose, onSuccess }) {
 
   if (success) {
     return (
-      <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.95)",display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"Inter,sans-serif"}}>
+      <div style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.95)",display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"Inter,sans-serif"}}>
         <div style={{background:"#0e0e1e",border:"1px solid #1a1a2e",borderRadius:20,padding:"36px 28px",width:"100%",maxWidth:380,textAlign:"center"}}>
           <div style={{fontSize:56,marginBottom:16}}>🎉</div>
           <div style={{fontWeight:900,fontSize:22,color:"#fff",marginBottom:8}}>{success.icon} {success.name} Activated!</div>
@@ -177,7 +177,7 @@ export default function Payment({ user, onClose, onSuccess }) {
   }
 
   return (
-    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.95)",overflowY:"auto",fontFamily:"Inter,sans-serif"}}>
+    <div style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.95)",overflowY:"auto",fontFamily:"Inter,sans-serif"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');*{box-sizing:border-box;margin:0;padding:0;}`}</style>
 
       {/* Header */}

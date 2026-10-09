@@ -4,7 +4,7 @@ import { supabase, db } from "./supabase.js";
 import { cacheVideoForOffline } from "./offline.js";
 import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
 import { useBodyScrollLock } from "./scrollLock.js";
-import { AD_FIRST_BREAK_SEC, AD_VOD_EVERY_SEC, AD_LIVE_EVERY_SEC, AD_END_GUARD_SEC } from "./adConfig.js";
+import { AD_FIRST_BREAK_SEC, AD_VOD_EVERY_SEC, AD_LIVE_EVERY_SEC, AD_END_GUARD_SEC, AD_PER_BREAK } from "./adConfig.js";
 
 // Poster tile with a clean fallback — if the image is missing or fails to
 // load, show a neutral card with the title instead of a blank/odd placeholder.
@@ -35,7 +35,7 @@ function Thumb({ src, title }) {
    ✅ Smart MP4 + HLS detection (fixed)
 ═══════════════════════════════════════════════════════ */
 
-const QUALITY = ["Auto","4K","1080p","720p","480p","360p"];
+const PREMIUM_MIN_HEIGHT = 1080; // 1080p and 4K need Premium
 const AUDIOS  = ["Hindi","English","Kannada","Tamil","Telugu","Bengali","Malayalam"]; // fallback only if content has no language set
 const SUBS    = ["Off","English"]; // honest options — see subtitle note below
 const SPEEDS  = [0.5,0.75,1,1.25,1.5,2];
@@ -70,7 +70,7 @@ const CSS = `
 `;
 
 
-export default function VideoPlayer({ content, user, onClose, onNext }) {
+export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade }) {
   const videoRef     = useRef(null);
   const hlsRef       = useRef(null);
   const containerRef = useRef(null);
@@ -111,6 +111,11 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const pausedForAdRef = useRef(false); // we paused the content for an ad (so we resume it)
   const watchedRef     = useRef(0);     // seconds of content actually watched
   const lastTimeRef    = useRef(0);
+  const podLeftRef     = useRef(0);     // ads still to play in the current break
+  const stallTimerRef  = useRef(null);
+  const [behindLive, setBehindLive] = useState(false);
+  const [adInSec, setAdInSec]       = useState(null);   // staff-only countdown
+  const [adStatus, setAdStatus]     = useState("");     // staff-only: what the ad system is doing
   const nextBreakRef   = useRef(0);     // watched-seconds at which the next ad break happens
   const [adPlaying, setAdPlaying] = useState(false);
 
@@ -123,6 +128,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const [subtitleUrl,setSubtitleUrl]= useState(null); // real .vtt track if admin set one
 
   const isPremium = ["plan_premium","plan_annual","premium"].includes(user?.plan);
+  const isStaff   = ["admin", "employee"].includes(user?.role) || !!user?.employee_id;
   const isLive    = content?.is_live || content?.type === "Live";
   const isSeries  = content?.type === "Series" || content?.type === "Web Series";
   // ── Languages ──────────────────────────────────────────────
@@ -148,7 +154,66 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   const [audioTracks, setAudioTracks] = useState([]);          // from the HLS stream itself
   const [audioIdx, setAudioIdx] = useState(0);
   const resumeAtRef = useRef(0);
+
+  // ── Schedule set in Admin (start / expiry) ──
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNowTick(Date.now()), 15000); return () => clearInterval(id); }, []);
+  const startsMs = content?.starts_at ? Date.parse(content.starts_at) : 0;
+  const endsMs   = content?.ends_at ? Date.parse(content.ends_at) : 0;
+  const notStarted = startsMs > nowTick;
+  const scheduleOver = endsMs > 0 && endsMs <= nowTick;
+  const blocked = notStarted || scheduleOver;
+  const wasBlockedRef = useRef(blocked);
+  // ── Live ended detection ──
+  const [liveEnded, setLiveEnded] = useState(false);
+  const lastAdvanceRef = useRef(Date.now());
+  const lastSnRef = useRef(-1);
+  const staleMsRef = useRef(45000);
+  const [qualityLevels, setQualityLevels] = useState([]);
+  const [adNum, setAdNum] = useState(1);
   useBodyScrollLock();
+
+  useEffect(() => {
+    if (!isStaff || isPremium) return;
+    const id = setInterval(() => {
+      const left = (nextBreakRef.current || AD_FIRST_BREAK_SEC) - watchedRef.current;
+      setAdInSec(Math.max(0, Math.ceil(left)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isStaff, isPremium]);
+
+  function endLiveNow() {
+    setLiveEnded(true);
+    try { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } videoRef.current?.pause(); } catch (e) {}
+  }
+  // Broadcast stopped (no new segments for a long time)? Show "Live ended" instead of replaying old footage
+  useEffect(() => {
+    if (!isLive || liveEnded) return;
+    const id = setInterval(() => {
+      if (hlsRef.current && !pausedForAdRef.current && Date.now() - lastAdvanceRef.current > staleMsRef.current) endLiveNow();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [isLive, liveEnded]);
+  // Start time reached -> start playing; expiry reached -> stop
+  useEffect(() => {
+    if (blocked) {
+      try { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } videoRef.current?.pause(); } catch (e) {}
+    } else if (wasBlockedRef.current) { setError(null); startInit(); }
+    wasBlockedRef.current = blocked;
+  }, [blocked]);
+
+  function pickQuality(opt) {            // opt = null -> Auto
+    if (opt && opt.premium && !isPremium) {
+      setShowSettings(false);
+      showToast("👑 " + opt.label + " is a Premium feature");
+      onUpgrade?.();                     // open the subscription screen, do NOT switch quality
+      return;
+    }
+    if (hlsRef.current) hlsRef.current.currentLevel = opt ? opt.index : -1;
+    setQuality(opt ? opt.label : "Auto");
+    setShowSettings(false);
+    showToast("Quality: " + (opt ? opt.label : "Auto"));
+  }
 
   function pickLanguage(language) {
     const vEl = videoRef.current;
@@ -308,14 +373,24 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         if (name === "CONTENT_PAUSE_REQUESTED") {
           pausedForAdRef.current = true;
           try { videoRef.current?.pause(); } catch (err) {}
-          setAdPlaying(true);
+          setAdPlaying(true); setAdStatus("ad playing"); setAdNum(Math.min(AD_PER_BREAK, AD_PER_BREAK - podLeftRef.current));
         } else if (name === "CONTENT_RESUME_REQUESTED" || name === "ALL_ADS_COMPLETED" || name === "AD_ERROR") {
           if (name === "AD_ERROR") {
+            podLeftRef.current = 0;
             const msg = e?.getError?.()?.getMessage?.() || e?.message || "no ad returned";
             console.warn("[StreamX ads]", msg);
-            // Staff see WHY an ad didn't play (ad blocker, bad tag, no fill...) instead of guessing
-            if (["admin", "employee"].includes(user?.role) || user?.employee_id) showToast("Ad not shown: " + msg);
+            setAdStatus("ERROR: " + msg);               // staff chip keeps the reason on screen
+            setTimeout(() => setAdStatus(s => (s.startsWith("ERROR") ? "" : s)), 20000);
           }
+          // Ad pod: play the next ad straight away, keep the content paused in between
+          if (name === "CONTENT_RESUME_REQUESTED" && podLeftRef.current > 0) {
+            podLeftRef.current--;
+            setAdStatus("next ad…");
+            setTimeout(() => adControllerRef.current?.requestAds(content), 0);
+            return;
+          }
+          if (name === "ALL_ADS_COMPLETED" && podLeftRef.current > 0) return; // chaining to the next ad
+          if (name !== "AD_ERROR") setAdStatus("");
           endAdBreak(); // no fill / blocked / finished — carry on with the content
         }
         // STARTED / FIRST_QUARTILE / MIDPOINT / THIRD_QUARTILE / COMPLETE /
@@ -334,6 +409,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   async function startInit() {
     // No ad before the video — playback starts immediately. Ads come later,
     // as in-stream breaks (see triggerAdBreak / the timeupdate handler).
+    if (blocked) return;                    // not started yet / already expired
     startVideo();
     const isEmbed = streamUrl.includes("youtube.com/embed") || streamUrl.includes("iframe");
     if (!isPremium && !isEmbed) {
@@ -350,6 +426,8 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     const controller = getAdController();
     if (!controller) return;
     adBreakRef.current = true;
+    podLeftRef.current = AD_PER_BREAK - 1;
+    setAdStatus("requesting ad…");
     controller.requestAds(content);
     setTimeout(() => { if (!pausedForAdRef.current) adBreakRef.current = false; }, 10000); // release lock if nothing started
   }
@@ -394,7 +472,7 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         v.src = streamUrl;
         const onCanPlay = () => {
           v.volume = volume;
-          if (user?.id && content?.id) {
+          if (user?.id && content?.id && !isLive) {
             db.getProgress(user.id, content.id).then(sec => { if (sec > 5) { v.currentTime = sec; showToast("Resumed from " + fmt(sec)); } }).catch(() => {});
           }
           v.play().catch(() => {}); setPlaying(true); resetHide(); setBuffering(false);
@@ -415,11 +493,20 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
       // Real HLS .m3u8
       if (Hls.isSupported()) {
         if (hlsRef.current) hlsRef.current.destroy();
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        const hls = new Hls({ enableWorker: true, lowLatencyMode: false, liveSyncDurationCount: 3, manifestLoadingMaxRetry: 4, levelLoadingMaxRetry: 4, fragLoadingMaxRetry: 6 });
         hlsRef.current = hls;
         hls.loadSource(streamUrl);
         hls.attachMedia(v);
-        setAudioTracks([]); setAudioIdx(0);
+        setAudioTracks([]); setAudioIdx(0); setQualityLevels([]); setQuality("Auto");
+        lastAdvanceRef.current = Date.now(); lastSnRef.current = -1;
+        hls.on(Hls.Events.LEVEL_LOADED, (_, d) => {
+          if (!isLive) return;
+          if (d.details.live === false) { endLiveNow(); return; }             // playlist closed = broadcast over
+          if (d.details.endSN !== lastSnRef.current) {                          // new segments are still arriving
+            lastSnRef.current = d.details.endSN; lastAdvanceRef.current = Date.now();
+            staleMsRef.current = Math.max(45000, (d.details.targetduration || 6) * 7000);
+          }
+        });
         const syncAudio = () => {
           const t = hls.audioTracks || [];
           setAudioTracks(t.map((x, i) => ({ i, label: x.name || x.lang || `Audio ${i + 1}` })));
@@ -429,12 +516,23 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => setAudioIdx(hls.audioTrack));
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           v.volume = volume;
+          // Real quality ladder from the stream itself + Premium gating (1080p / 4K)
+          const uniq = [];
+          (hls.levels || []).map((l, i) => ({ index: i, height: l.height || 0 })).filter(l => l.height)
+            .sort((x, y) => y.height - x.height).forEach(l => { if (!uniq.some(u => u.height === l.height)) uniq.push(l); });
+          setQualityLevels(uniq.map(l => ({ ...l, label: l.height >= 2000 ? "4K" : l.height + "p", premium: l.height >= PREMIUM_MIN_HEIGHT })));
+          if (!isPremium && uniq.length) {            // free plan: Auto never picks 1080p / 4K
+            const free = uniq.filter(l => l.height < PREMIUM_MIN_HEIGHT);
+            hls.autoLevelCapping = free.length ? Math.max(...free.map(l => l.index)) : Math.min(...uniq.map(l => l.index));
+          }
           if (resumeAtRef.current > 0 && !isLive) { v.currentTime = resumeAtRef.current; resumeAtRef.current = 0; }
-          else if (user?.id && content?.id) {
+          else if (user?.id && content?.id && !isLive) {
             db.getProgress(user.id, content.id).then(sec => { if (sec > 5) { v.currentTime = sec; showToast("Resumed from " + fmt(sec)); } }).catch(() => {});
           }
           v.play().catch(() => {}); setPlaying(true); resetHide();
         });
+        // Live channels always start at the LIVE edge (never in the middle)
+        if (isLive) v.addEventListener("loadedmetadata", () => goLive(), { once: true });
         let netRetries = 0;
         hls.on(Hls.Events.ERROR, (_, d) => {
           if (!d.fatal) return;
@@ -463,6 +561,11 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
     const onTime = () => {
       if (!seeking) { setProgress(v.currentTime); setDuration(v.duration || 0); }
       if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
+      if (isLive) {
+        const edge = liveEdge();
+        const behind = edge > 0 && edge - v.currentTime > 15;
+        setBehindLive(b => (b === behind ? b : behind));
+      }
       // ── Ad breaks: first after AD_FIRST_BREAK_SEC of watching, then regularly ──
       const dt = v.currentTime - lastTimeRef.current;
       lastTimeRef.current = v.currentTime;
@@ -478,17 +581,22 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         }
       }
       if (v.duration && v.currentTime >= v.duration * 0.94 && nextCount === null && isSeries) setNextCount(10);
-      if (user?.id && content?.id && Math.floor(v.currentTime) % 10 === 0) {
+      if (user?.id && content?.id && !isLive && Math.floor(v.currentTime) % 10 === 0) {
         db.saveProgress(user.id, content.id, Math.floor(v.currentTime), Math.floor(v.duration || 0)).catch(() => {});
       }
     };
     v.addEventListener("timeupdate", onTime);
+    // Live stuck on buffering for 10 s (network hiccup)? Jump back to live automatically.
+    const onWait = () => { if (!isLive || stallTimerRef.current) return; stallTimerRef.current = setTimeout(() => { stallTimerRef.current = null; if (!pausedForAdRef.current) goLive(); }, 10000); };
+    const onPlayingEv = () => { if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; } };
+    v.addEventListener("waiting", onWait);
+    v.addEventListener("playing", onPlayingEv);
     v.addEventListener("play",  () => setPlaying(true));
     v.addEventListener("pause", () => setPlaying(false));
     v.addEventListener("ended", () => { setPhase("ended"); setPlaying(false); });
     v.addEventListener("enterpictureinpicture", () => setIsPiP(true));
     v.addEventListener("leavepictureinpicture", () => setIsPiP(false));
-    return () => { v.removeEventListener("timeupdate", onTime); };
+    return () => { v.removeEventListener("timeupdate", onTime); v.removeEventListener("waiting", onWait); v.removeEventListener("playing", onPlayingEv); };
   }, [phase, seeking, isPremium, nextCount]);
 
   useEffect(() => {
@@ -499,6 +607,24 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
   }, [nextCount]);
 
   function togglePlay() { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause(); resetHide(); }
+  // ── LIVE helpers ──
+  function liveEdge() {
+    const h = hlsRef.current, vv = videoRef.current;
+    if (h && h.liveSyncPosition > 0) return h.liveSyncPosition;
+    const s = vv?.seekable;
+    return s && s.length ? s.end(s.length - 1) : 0;
+  }
+  function goLive() {
+    const vv = videoRef.current; if (!vv) return;
+    const h = hlsRef.current;
+    const det = h?.levels?.[h.currentLevel]?.details;
+    if (h && (!det || det.live)) { try { h.startLoad(-1); } catch (e) {} }   // restart loading at the live edge (fixes "stuck" after network drops)
+    const t = liveEdge();
+    if (t > 0) { try { vv.currentTime = Math.max(0, t - 1); } catch (e) {} }
+    vv.play().catch(() => {});
+    setBehindLive(false);
+  }
+
   function seekTo(val) { const v = videoRef.current; if (!v) return; v.currentTime = Math.max(0, Math.min(v.duration || 0, val)); setProgress(v.currentTime); }
   function skipSec(s) { seekTo(progress + s); showToast(s > 0 ? `+${Math.abs(s)}s` : `-${Math.abs(s)}s`); }
   function toggleMute() { const v = videoRef.current; if (!v) return; v.muted = !v.muted; setMuted(v.muted); }
@@ -645,6 +771,19 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
         )}
 
         {/* Error */}
+        {(blocked || liveEnded) && (
+          <div style={{ position:"absolute", inset:0, zIndex:55, background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10, padding:24, textAlign:"center", color:"#fff" }}>
+            <div style={{ fontSize:42 }}>{notStarted ? "⏰" : "📴"}</div>
+            <div style={{ fontSize:18, fontWeight:800 }}>{notStarted ? "Live starts soon" : "This live has ended"}</div>
+            <div style={{ fontSize:13, color:"#aaa" }}>
+              {notStarted ? `Starts ${new Date(startsMs).toLocaleString([], { weekday:"short", day:"numeric", month:"short", hour:"numeric", minute:"2-digit" })}  ·  in ${(() => { const m = Math.max(1, Math.round((startsMs - nowTick) / 60000)); return m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + " min"; })()}` : "Thanks for watching. Check Home for more live channels."}
+            </div>
+            <div style={{ display:"flex", gap:10, marginTop:6 }}>
+              {liveEnded && !blocked && <button onClick={() => { setLiveEnded(false); setError(null); lastAdvanceRef.current = Date.now(); startInit(); }} style={{ background:"#1565c0", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, cursor:"pointer" }}>↻ Check again</button>}
+              <button onClick={onClose} style={{ background:"#222", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", cursor:"pointer" }}>Close</button>
+            </div>
+          </div>
+        )}
         {error && (
           <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14, background:"#000", padding:20, zIndex:30 }}>
             <div style={{ fontSize:40 }}>⚠️</div>
@@ -694,9 +833,17 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
           ref={adContainerRef}
           style={{ position:"absolute", inset:0, zIndex: adPlaying ? 60 : -1, background: adPlaying ? "#000" : "transparent", pointerEvents: adPlaying ? "auto" : "none" }}
         />
+        {isLive && behindLive && !adPlaying && (
+          <button onClick={goLive} style={{ position:"absolute", top:14, right:14, zIndex:45, background:"#e50914", color:"#fff", border:"none", borderRadius:20, padding:"7px 16px", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 2px 12px rgba(0,0,0,.5)" }}>⏵ GO LIVE</button>
+        )}
+        {isStaff && !isPremium && !adPlaying && (
+          <div style={{ position:"absolute", left:12, bottom:70, zIndex:45, background:"rgba(0,0,0,.72)", color: adStatus.startsWith("ERROR") ? "#ff6b6b" : "#9be7a8", fontSize:11, padding:"5px 10px", borderRadius:6, maxWidth:"80%", pointerEvents:"none" }}>
+            🧪 Staff view · {adStatus || (adInSec !== null ? `next ad break in ${fmt(adInSec)}` : "ads armed")} · {IS_TEST_AD_TAG ? "Google test ad" : "live ad tag"}
+          </div>
+        )}
         {adPlaying && (
           <div style={{ position:"absolute", top:14, left:14, zIndex:61, background:"rgba(0,0,0,.7)", backdropFilter:"blur(8px)", color:"#aaa", fontSize:10, padding:"4px 12px", borderRadius:20, letterSpacing:3, textTransform:"uppercase", border:"1px solid rgba(255,255,255,.08)", pointerEvents:"none" }}>
-            Advertisement{IS_TEST_AD_TAG ? " (test)" : ""}
+            Ad {adNum} of {AD_PER_BREAK}{IS_TEST_AD_TAG ? " · test" : ""}
           </div>
         )}
 
@@ -769,7 +916,13 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
 
             {/* Bottom */}
             <div style={{ padding:"0 clamp(12px,3vw,18px) clamp(10px,2vw,14px)", pointerEvents:"auto" }}>
-              <div style={{ textAlign:"right", fontSize:12, color:"rgba(255,255,255,.6)", marginBottom:5 }}>{fmt(progress)} / {fmt(duration)}</div>
+              <div style={{ textAlign:"right", fontSize:12, color:"rgba(255,255,255,.6)", marginBottom:5 }}>
+                {isLive ? (
+                  <button onClick={goLive} style={{ background: behindLive ? "#e50914" : "transparent", border: "1px solid #e50914", color: "#fff", borderRadius: 14, padding: "3px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {behindLive ? `⏵ GO LIVE  −${fmt(Math.max(0, liveEdge() - progress))}` : "● LIVE"}
+                  </button>
+                ) : <>{fmt(progress)} / {fmt(duration)}</>}
+              </div>
               <div style={{ position:"relative", height:4, background:"rgba(255,255,255,.2)", borderRadius:2, marginBottom:4 }}>
                 <div style={{ position:"absolute", left:0, top:0, height:"100%", background:"rgba(255,255,255,.35)", borderRadius:2, width:bufPct+"%" }}/>
                 <div style={{ position:"absolute", left:0, top:0, height:"100%", background:"#1565c0", borderRadius:2, width:pct+"%" }}/>
@@ -957,10 +1110,14 @@ export default function VideoPlayer({ content, user, onClose, onNext }) {
               ))}
             </div>
             <div style={{ overflowY:"auto", flex:1, paddingBottom:20 }}>
-              {settingsTab === "quality" && QUALITY.map(q => (
-                <div key={q} className="vp-sopt" onClick={() => { setQuality(q); setShowSettings(false); showToast("Quality: "+q); }}>
-                  {quality === q ? <span style={{ color:"#1565c0", fontSize:18, flexShrink:0 }}>✓</span> : <span style={{ width:18 }}/>}
-                  <div style={{ flex:1 }}><div style={{ fontWeight:quality===q?700:400, fontSize:14, color:"#fff" }}>{q}</div>{q === "4K" && !isPremium && <div style={{ fontSize:11, color:"#f59e0b" }}>Requires Premium</div>}</div>
+              {settingsTab === "quality" && [{ label:"Auto", index:-1, premium:false }, ...qualityLevels].map(opt => (
+                <div key={opt.label} className="vp-sopt" onClick={() => pickQuality(opt.index === -1 ? null : opt)}>
+                  {quality === opt.label ? <span style={{ color:"#1565c0", fontSize:18, flexShrink:0 }}>✓</span> : <span style={{ width:18 }}/>}
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:quality===opt.label?700:400, fontSize:14, color:"#fff" }}>{opt.label}{opt.premium && <span style={{ marginLeft:8 }}>👑</span>}</div>
+                    {opt.premium && !isPremium && <div style={{ fontSize:11, color:"#f59e0b" }}>Premium · tap to upgrade</div>}
+                    {opt.label === "Auto" && <div style={{ fontSize:11, color:"#777" }}>{qualityLevels.length ? "Best quality for your connection" : "This stream has a single quality"}</div>}
+                  </div>
                 </div>
               ))}
               {settingsTab === "audio" && (

@@ -93,6 +93,12 @@ function cleanBody(body, protectedFields) {
   const out = {};
   for (const [k, v] of Object.entries(body)) {
     if (protectedFields.includes(k) || k === "__proto__" || k === "constructor") continue;
+    if (k === "starts_at" || k === "ends_at") {          // optional schedule
+      if (v === "" || v === null) { out[k] = null; continue; }
+      const t = Date.parse(v);
+      if (!Number.isFinite(t)) return { error: `"${k}" is not a valid date` };
+      out[k] = new Date(t).toISOString(); continue;
+    }
     if (k === "language_streams") {
       // [{ language, url }] — one stream link per extra language
       if (!Array.isArray(v) || v.length > 12) return { error: "language_streams must be a list of up to 12 items" };
@@ -113,6 +119,7 @@ function cleanBody(body, protectedFields) {
       out[k] = t;
     } else out[k] = v;
   }
+  if (out.starts_at && out.ends_at && Date.parse(out.ends_at) <= Date.parse(out.starts_at)) return { error: "Expiry must be after the start time" };
   return { data: out };
 }
 

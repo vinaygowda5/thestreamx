@@ -14,6 +14,7 @@ const {
 const { requireStaff } = require("./src/middleware/auth");
 const app = express();
 app.disable("x-powered-by");
+try { app.use(require("compression")()); } catch (e) { console.warn("compression not installed (run npm install)"); }
 app.set("trust proxy", 1); // behind Render's proxy: real client IPs for rate limits
 
 app.use(compression()); // gzip API responses — cuts payload size ~70% for JSON

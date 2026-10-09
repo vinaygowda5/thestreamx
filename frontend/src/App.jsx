@@ -1,19 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import Login from "./Login.jsx";
 import Home from "./Home.jsx";
-import Profile from "./Profile.jsx";
-import Admin from "./Admin.jsx";
-import Search from "./Search.jsx";
-import Payment from "./Payment.jsx";
-import LegalPage from "./LegalPage.jsx";
-import CustomerSupport from "./CustomerSupport.jsx";
+const Profile = lazy(() => import("./Profile.jsx"));
+const Admin = lazy(() => import("./Admin.jsx"));
+const Search = lazy(() => import("./Search.jsx"));
+const Payment = lazy(() => import("./Payment.jsx"));
+const LegalPage = lazy(() => import("./LegalPage.jsx"));
+const CustomerSupport = lazy(() => import("./CustomerSupport.jsx"));
 import { t } from "./i18n.js";
 import { API } from "./config.js";
 
 const ADMIN_PHONES = ["+918660570052", "+919000000000", "+919000000001"];
 const ADMIN_EMAILS = ["admin@streamx.in", "vinaygowdaw@gmail.com"];
 
-export default function App() {
+function AppInner() {
   const [user,    setUser]    = useState(null);
   const [page,    setPage]    = useState("home");
   const [loading, setLoading] = useState(true);
@@ -171,5 +171,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+// Heavy screens (Admin, Profile, Payment...) load only when opened, so the first screen appears much faster
+export default function App() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#07070c" }} />}>
+      <AppInner />
+    </Suspense>
   );
 }
