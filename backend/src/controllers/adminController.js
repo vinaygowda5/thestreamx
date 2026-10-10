@@ -123,6 +123,15 @@ function cleanBody(body, protectedFields) {
   return { data: out };
 }
 
+// Unique views (one row per viewer per title) for the last N days — drives the Watch Activity chart
+async function getViewEvents(req, res) {
+  const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { data, error } = await sb.from("content_views").select("viewed_at").gte("viewed_at", since).limit(20000);
+  if (error) return ok(res, { available: false, events: [] });   // table not created yet
+  return ok(res, { available: true, events: (data || []).map(r => r.viewed_at) });
+}
+
 async function getAllContent(req, res) {
   // Soft-deleted rows (deleted_at set) are hidden from the admin list
   let q = await sb.from("content").select("*").is("deleted_at", null).order("created_at", { ascending: false });
@@ -216,4 +225,4 @@ async function deleteAd(req, res) {
   return ok(res, null, "Ad deleted");
 }
 
-module.exports = { getStats, getRevenueAnalytics, getAllUsers, suspendUser, activateUser, getAllContent, addContent, updateContent, deleteContent, getAllAds, addAd, updateAd, deleteAd };
+module.exports = { getViewEvents,  getStats, getRevenueAnalytics, getAllUsers, suspendUser, activateUser, getAllContent, addContent, updateContent, deleteContent, getAllAds, addAd, updateAd, deleteAd };

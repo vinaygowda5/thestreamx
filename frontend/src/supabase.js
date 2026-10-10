@@ -122,11 +122,12 @@ export const db = {
   /* ── REAL VIEWS + LIKES ──
      Requires the SQL migration (increment_content_views / toggle_content_like
      RPC functions + content_likes table) to be run in Supabase first. */
-  async incrementViews(contentId) {
-    // Atomic server-side increment — avoids the read-then-write race that
-    // a plain `.update({views: views+1})` from the client would have.
-    const { error } = await supabase.rpc("increment_content_views", { p_content_id: contentId });
-    if (error) console.error("incrementViews failed:", error.message);
+  // One view per viewer per title, registered only after real watching (see VideoPlayer).
+  async registerView(contentId, userId) {
+    if (!contentId || !userId) return false;
+    const { data, error } = await supabase.rpc("register_content_view", { p_content_id: String(contentId), p_user_id: String(userId) });
+    if (error) { console.warn("registerView failed (run VIEWS_AND_ANALYTICS.sql):", error.message); return false; }
+    return !!data;
   },
   async toggleLike(contentId, userId) {
     if (!userId) throw new Error("Must be logged in to like");

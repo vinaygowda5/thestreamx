@@ -44,7 +44,8 @@ export default function CustomerSupport({ user, onClose }) {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
-          messages: updated.slice(-10),
+          // only the real conversation: drop the assistant greeting that starts the chat
+          messages: updated.filter((m,idx)=>!(idx===0&&m.role==="assistant")).slice(-10),
           userId: user?.id || null,
         }),
       });

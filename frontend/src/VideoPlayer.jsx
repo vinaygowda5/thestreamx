@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Hls from "hls.js";
 import { supabase, db } from "./supabase.js";
-import { cacheVideoForOffline } from "./offline.js";
+import { cacheVideoForOffline, isCachedOffline } from "./offline.js";
 import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
 import { useBodyScrollLock } from "./scrollLock.js";
 import { AD_FIRST_BREAK_SEC, AD_VOD_EVERY_SEC, AD_LIVE_EVERY_SEC, AD_END_GUARD_SEC, AD_PER_BREAK } from "./adConfig.js";
@@ -36,6 +36,8 @@ function Thumb({ src, title }) {
 ═══════════════════════════════════════════════════════ */
 
 const PREMIUM_MIN_HEIGHT = 1080; // 1080p and 4K need Premium
+const VIEW_AFTER_SEC = 30;        // a view counts after 30 s of real watching (one per viewer per title)
+const kfmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : String(n);
 const AUDIOS  = ["Hindi","English","Kannada","Tamil","Telugu","Bengali","Malayalam"]; // fallback only if content has no language set
 const SUBS    = ["Off","English"]; // honest options — see subtitle note below
 const SPEEDS  = [0.5,0.75,1,1.25,1.5,2];
@@ -170,6 +172,11 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   const lastSnRef = useRef(-1);
   const staleMsRef = useRef(45000);
   const [qualityLevels, setQualityLevels] = useState([]);
+  const [watching, setWatching] = useState(0);        // live: how many members are watching right now
+  const [fakeFs, setFakeFs] = useState(false);          // iPhone has no real fullscreen: rotate the player ourselves
+  const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth);
+  const [dlPct, setDlPct] = useState(null);             // download progress (null = idle)
+  const [dlDone, setDlDone] = useState(false);
   const [adNum, setAdNum] = useState(1);
   useBodyScrollLock();
 
@@ -181,6 +188,29 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
     }, 1000);
     return () => clearInterval(id);
   }, [isStaff, isPremium]);
+
+  // ── Live audience: everyone watching a live channel joins one realtime room; the count is the room size ──
+  useEffect(() => {
+    if (!isLive || !content?.id) return;
+    const key = user?.id ? String(user.id) : "guest-" + Math.random().toString(36).slice(2);
+    const room = supabase.channel("live-viewers-" + content.id, { config: { presence: { key } } });
+    room.on("presence", { event: "sync" }, () => setWatching(Object.keys(room.presenceState()).length))
+        .subscribe(async status => { if (status === "SUBSCRIBED") { try { await room.track({ at: Date.now() }); } catch (e) {} } });
+    return () => { try { supabase.removeChannel(room); } catch (e) {} };
+  }, [isLive, content?.id, user?.id]);
+
+  // ── Screen rotation / fullscreen bookkeeping ──
+  useEffect(() => {
+    const onResize = () => setPortrait(window.innerHeight > window.innerWidth);
+    const onFs = () => { if (!document.fullscreenElement && !document.webkitFullscreenElement) setFS(f => (fakeFsRef.current ? f : false)); };
+    window.addEventListener("resize", onResize); window.addEventListener("orientationchange", onResize);
+    document.addEventListener("fullscreenchange", onFs); document.addEventListener("webkitfullscreenchange", onFs);
+    return () => { window.removeEventListener("resize", onResize); window.removeEventListener("orientationchange", onResize); document.removeEventListener("fullscreenchange", onFs); document.removeEventListener("webkitfullscreenchange", onFs); };
+  }, []);
+  const fakeFsRef = useRef(false);
+  useEffect(() => { fakeFsRef.current = fakeFs; }, [fakeFs]);
+  // Is this file already downloaded in the app?
+  useEffect(() => { let off = false; if (streamUrl) isCachedOffline(streamUrl).then(r => { if (!off) setDlDone(!!r); }).catch(() => {}); return () => { off = true; }; }, [streamUrl]);
 
   function endLiveNow() {
     setLiveEnded(true);
@@ -266,10 +296,8 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   // ── Real view count — increments exactly once per time this title is
   // opened (not per render, not randomized). Replaces the old dead
   // backend increment that the frontend never actually called. ──
-  useEffect(() => {
-    if (!content?.id) return;
-    db.incrementViews(content.id);
-  }, [content?.id]);
+  // (A view is now counted in the timeupdate handler after real watching — see VIEW_AFTER_SEC.)
+  const viewCountedRef = useRef(false);
 
   // ── Real likes — reflects an actual per-user like, toggleable, backed
   // by the content_likes table (see supabase_migration_likes_views.sql) ──
@@ -570,6 +598,10 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
       const dt = v.currentTime - lastTimeRef.current;
       lastTimeRef.current = v.currentTime;
       if (!v.paused && dt > 0 && dt < 2) watchedRef.current += dt;   // real playback only (not seeks)
+      if (!viewCountedRef.current && user?.id && content?.id) {
+        const need = Number.isFinite(v.duration) && v.duration > 0 && v.duration < VIEW_AFTER_SEC * 2 ? v.duration * 0.5 : VIEW_AFTER_SEC;
+        if (watchedRef.current >= need) { viewCountedRef.current = true; db.registerView(content.id, user.id); }
+      }
       if (!isPremium && !adBreakRef.current) {
         const finite = Number.isFinite(v.duration) && v.duration > 0;
         const live = isLive || v.duration === Infinity;
@@ -632,11 +664,20 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   function changeSpeed(s) { const v = videoRef.current; if (v) v.playbackRate = s; setSpeed(s); showToast(s + "x speed"); }
 
   function toggleFS() {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen?.().then(() => { setFS(true); if (isMobile && screen.orientation?.lock) screen.orientation.lock("landscape").catch(()=>{}); }).catch(() => {});
-    } else {
-      document.exitFullscreen?.().then(() => { setFS(false); if (screen.orientation?.unlock) screen.orientation.unlock(); }).catch(() => {});
+    if (fakeFs) { setFakeFs(false); setFS(false); return; }
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      setFS(false); if (screen.orientation?.unlock) { try { screen.orientation.unlock(); } catch (e) {} }
+      return;
     }
+    const el = containerRef.current;
+    const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
+    const useFake = () => { setFakeFs(true); setFS(true); };   // iPhone: no fullscreen API -> rotate the player ourselves
+    if (!req) { useFake(); return; }
+    try {
+      const r = req.call(el);
+      Promise.resolve(r).then(() => { setFS(true); if (isMobile && screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {}); }).catch(useFake);
+    } catch (e) { useFake(); }
   }
 
   async function togglePiP() {
@@ -675,39 +716,40 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   // all). We cache the actual video bytes in the browser's private Cache
   // Storage; playback later reads straight from that cache, no network
   // needed. Premium-only, matching how real OTT download features work. ──
-  const [downloading, setDownloadingState] = useState(false);
+
   async function handleDownload() {
     if (!user?.id) { showToast("Sign in to download"); return; }
-    if (!isPremium) { showToast("Downloads are a Premium feature — upgrade to unlock", "err"); return; }
-    if (!streamUrl) { showToast("No video file available"); return; }
-    if (streamUrl.includes(".m3u8")) { showToast("This stream can't be downloaded — only direct video files can be"); return; }
-    if (downloading) return;
-    setDownloadingState(true);
-    showToast("Downloading for offline viewing...");
-    try {
-      await cacheVideoForOffline(streamUrl);
-      await db.logDownload(user.id, content.id);
-      showToast("Downloaded — available in Profile → Downloads ✓");
-    } catch (e) {
-      // "Failed to fetch" here almost always means the video's storage
-      // (R2, S3, etc.) hasn't been told it's OK for thestreamx.com to read
-      // the file bytes with JavaScript (CORS) — playback still works fine
-      // without that, but downloading needs it specifically.
-      if (e.message.includes("Failed to fetch") || e.name === "TypeError") {
-        showToast("Download blocked — this video's storage needs CORS enabled for downloads to work");
-      } else {
-        showToast("Download failed: " + e.message);
-      }
+    if (!isPremium) {                                  // free viewers are taken to the subscription screen (like Hotstar)
+      showToast("👑 Downloads need a Premium subscription");
+      onUpgrade?.();
+      return;
     }
-    setDownloadingState(false);
+    if (dlPct !== null) return;                        // already downloading
+    if (dlDone) { showToast("Already downloaded. Watch it offline from Profile → Downloads"); return; }
+    if (!streamUrl) { showToast("No video file available"); return; }
+    if (streamUrl.includes(".m3u8")) { showToast("This stream can't be downloaded. Only direct video files can be"); return; }
+    setDlPct(0);
+    try {
+      await cacheVideoForOffline(streamUrl, pct => setDlPct(pct === null ? 0 : pct));
+      await db.logDownload(user.id, content.id);
+      setDlDone(true);
+      showToast("Downloaded ✓ Saved inside StreamX (Profile → Downloads)");
+    } catch (e) {
+      // "Failed to fetch" almost always means the video's storage (R2, S3...) has not been told it is OK
+      // for this website to read the file bytes (CORS). Playback works without it, downloading needs it.
+      if (e.message.includes("Failed to fetch") || e.name === "TypeError") showToast("Download blocked: this video's storage needs CORS enabled for downloads");
+      else showToast("Download failed: " + e.message);
+    }
+    setDlPct(null);
   }
 
   // ── Mobile gesture handling: double tap to seek ──
   function handleVideoTap(e) {
     const now = Date.now();
     const rect = containerRef.current?.getBoundingClientRect();
-    const x = (e.touches?.[0]?.clientX || e.clientX) - (rect?.left || 0);
-    const w = rect?.width || window.innerWidth;
+    const rotated = fakeFs && portrait;                       // sideways player: visual left/right are screen top/bottom
+    const x = rotated ? (e.touches?.[0]?.clientY || e.clientY) - (rect?.top || 0) : (e.touches?.[0]?.clientX || e.clientX) - (rect?.left || 0);
+    const w = rotated ? (rect?.height || window.innerHeight) : (rect?.width || window.innerWidth);
     const side = x < w / 2 ? "left" : x > w * 0.65 ? "right" : "center";
 
     if (now - lastTap.current < 300 && side !== "center") {
@@ -732,12 +774,15 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
 
   return (
     <div ref={containerRef} className="vp"
-      style={{ position:"fixed", inset:0, zIndex:700, background:"#000", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      style={fakeFs && portrait
+        // iPhone "fullscreen": the whole player is turned sideways so it fills the screen in landscape
+        ? { position:"fixed", top:0, left:0, width:"100dvh", height:"100dvw", transformOrigin:"0 0", transform:"translateX(100dvw) rotate(90deg)", zIndex:700, background:"#000", display:"flex", flexDirection:"column", overflow:"hidden" }
+        : { position:"fixed", inset:0, zIndex:700, background:"#000", display:"flex", flexDirection:"column", overflow:"hidden" }}>
       <style>{CSS}</style>
 
       {/* ═══ VIDEO AREA ═══ */}
       <div
-        style={{ position:"relative", background:"#000", flexShrink:0, height: fullscreen ? "100dvh" : "clamp(220px,56.25vw,62vh)" }}
+        style={{ position:"relative", background:"#000", flexShrink:0, height: fullscreen ? "100%" : "clamp(220px,56.25vw,62vh)" }}
         onMouseMove={!isMobile ? resetHide : undefined}
         onClick={!isMobile ? (e => { if (e.target === e.currentTarget || e.target.tagName === "VIDEO") togglePlay(); }) : undefined}
         onTouchStart={isMobile ? handleVideoTap : undefined}
@@ -871,6 +916,7 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
                 <div style={{ fontSize:11, color:"rgba(255,255,255,.45)" }}>
                   {content?.type}{content?.release_year ? ` · ${content.release_year}` : ""}{isLive ? "" : content?.rating ? ` · ${content.rating}` : ""}
                   {isLive && <span style={{ color:"#e50914", fontWeight:700, marginLeft:8, animation:"vp-pulse 1.5s infinite" }}>● LIVE</span>}
+                  {isLive && watching > 0 && <span style={{ color:"#ddd", fontWeight:600, marginLeft:10, fontSize:12 }}>👁 {kfmt(watching)} watching</span>}
                 </div>
               </div>
               <div style={{ display:"flex", gap:4, alignItems:"center" }}>
@@ -964,7 +1010,7 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
             {content?.title}
           </div>
           <div style={{ fontSize:13, color:"#8a8a99" }}>
-            {isLive ? <span style={{ color:"#e50914", fontWeight:700, letterSpacing:1 }}>● LIVE</span> : [
+            {isLive ? <span style={{ color:"#e50914", fontWeight:700, letterSpacing:1 }}>● LIVE{watching > 0 && <span style={{ color:"#aaa", fontWeight:500, letterSpacing:0, marginLeft:10 }}>👁 {kfmt(watching)} watching</span>}</span> : [
               content?.release_year,
               content?.runtime || null,
               isSeries ? `${content?.season_count || 1} Season${(content?.season_count||1)>1?"s":""}` : (content?.language ? `${[content?.language].length} Language${1>1?"s":""}` : null)
@@ -1004,7 +1050,7 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
           {[
             // Live channels can't be saved or downloaded
             !isLive && { icon: inWL ? "✓" : "＋", label: inWL ? "Watchlisted" : "Watchlist", action: toggleWL, color: inWL ? "#00c853" : undefined },
-            !isLive && { icon: downloading ? "⏳" : "⬇", label: downloading ? "Downloading..." : "Download", action: handleDownload },
+            !isLive && { icon: dlPct !== null ? "⏳" : dlDone ? "✅" : "⬇", label: dlPct !== null ? `Downloading ${dlPct}%` : dlDone ? "Downloaded" : "Download", action: handleDownload },
             { icon:"↗", label:"Share",    action: handleShare },
             { icon: liked ? "♥" : "♡", label: liked ? "Liked" : "Like", action: handleToggleLike, color: liked ? "#e50914" : undefined },
           ].filter(Boolean).map(btn => (

@@ -8,6 +8,7 @@ router.get("/users",           requireAdmin, c.getAllUsers);
 router.put("/users/:id/suspend", requireAdmin, c.suspendUser);
 router.put("/users/:id/activate",requireAdmin, c.activateUser);
 router.get("/content",         requireAdmin, c.getAllContent);
+router.get("/analytics/views",  requireAdmin, c.getViewEvents);
 router.post("/content",        requireAdmin, c.addContent);
 router.put("/content/:id",     requireAdmin, c.updateContent);
 router.delete("/content/:id",  requireAdmin, identify(), c.deleteContent);

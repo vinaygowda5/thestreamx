@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, Component } from "react";
 import Login from "./Login.jsx";
 import Home from "./Home.jsx";
 const Profile = lazy(() => import("./Profile.jsx"));
@@ -174,10 +174,38 @@ function AppInner() {
   );
 }
 // Heavy screens (Admin, Profile, Payment...) load only when opened, so the first screen appears much faster
+// A new deploy renames the screen files, so an already-open tab can fail to load one ("black screen").
+// Reload once automatically; any other crash shows a Reload button instead of an empty page.
+const isChunkError = e => /dynamically imported module|Loading chunk|Importing a module script failed|error loading dynamically/i.test(String(e?.message || e));
+class ErrorBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(e) {
+    console.error("App crashed:", e);
+    if (isChunkError(e)) {
+      const last = Number(sessionStorage.getItem("streamx_chunk_reload") || 0);
+      if (Date.now() - last > 30000) { sessionStorage.setItem("streamx_chunk_reload", String(Date.now())); window.location.reload(); }
+    }
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div style={{ minHeight: "100vh", background: "#07070c", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, fontFamily: "Inter,sans-serif", textAlign: "center", padding: 24 }}>
+        <div style={{ fontSize: 40 }}>⚠️</div>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>Something went wrong</div>
+        <div style={{ color: "#999", fontSize: 13 }}>Please reload. If it keeps happening, tell support.</div>
+        <button onClick={() => window.location.reload()} style={{ background: "#e50914", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontWeight: 700, cursor: "pointer" }}>Reload</button>
+      </div>
+    );
+  }
+}
+
 export default function App() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#07070c" }} />}>
-      <AppInner />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<div style={{ minHeight: "100vh", background: "#07070c" }} />}>
+        <AppInner />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

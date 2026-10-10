@@ -214,34 +214,75 @@ function Toast({msg,type="ok"}){
 }
 
 // ── BAR CHART (pure CSS) ─────────────────────────────────
-function BarChart({data,height=200,color=R,title}){
+const PALETTE=["#ff6a3d","#f59e0b","#22c55e","#06b6d4","#6366f1","#a855f7","#ec4899","#84cc16"];
+function BarChart({data,height=200,color=R,title,multi=false}){
   if(!data||data.length===0) return null;
   const max=Math.max(...data.map(d=>d.value),1);
   return(
     <div>
       {title&&<div style={{fontSize:13,fontWeight:700,marginBottom:14,color:"#e2e2f0"}}>{title}</div>}
-      <div style={{display:"flex",alignItems:"flex-end",gap:8,height,position:"relative"}}>
-        {/* Y axis lines */}
+      <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-around",gap:8,height:height+34,position:"relative",paddingLeft:26}}>
         {[0,.25,.5,.75,1].map(f=>(
-          <div key={f} style={{position:"absolute",left:0,right:0,bottom:f*height,borderTop:`1px dashed #181828`,zIndex:0,pointerEvents:"none"}}>
-            <span style={{position:"absolute",left:0,top:-8,fontSize:9,color:"#252540",fontWeight:600}}>{fN(Math.round(max*f))}</span>
+          <div key={f} style={{position:"absolute",left:0,right:0,bottom:34+f*height,borderTop:"1px dashed #1c1c30",pointerEvents:"none"}}>
+            <span style={{position:"absolute",left:0,top:-8,fontSize:9,color:"#44446a",fontWeight:600}}>{fN(Math.round(max*f))}</span>
           </div>
         ))}
         {data.map((d,i)=>{
-          const h=Math.max(4,(d.value/max)*height);
+          const c=multi?PALETTE[i%PALETTE.length]:color;
+          const h=d.value>0?Math.max(6,(d.value/max)*height):3;
           return(
-            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,zIndex:1}} title={`${d.label}: ${fN(d.value)}`}>
-              <div style={{fontSize:9,color:"#e2e2f0",fontWeight:700,opacity:.7}}>{fN(d.value)}</div>
-              <div style={{width:"100%",height:h,background:`linear-gradient(to top,${color},${color}88)`,borderRadius:"4px 4px 0 0",transition:"height .6s ease",boxShadow:`0 0 8px ${color}44`,position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",inset:0,background:"linear-gradient(to right,transparent,rgba(255,255,255,.08),transparent)"}}/>
-              </div>
-              <div style={{fontSize:9,color:"#3a3a5a",fontWeight:600,textAlign:"center",lineHeight:1.2,width:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</div>
+            <div key={i} style={{flex:"1 1 0",maxWidth:54,minWidth:14,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:5,zIndex:1,height:"100%"}} title={`${d.label}: ${fN(d.value)}`}>
+              <div style={{fontSize:10,color:"#e2e2f0",fontWeight:700}}>{fN(d.value)}</div>
+              <div style={{width:"100%",height:h,background:`linear-gradient(to top,${c},${c}aa)`,borderRadius:"6px 6px 2px 2px",transition:"height .6s ease",boxShadow:`0 0 10px ${c}55`}}/>
+              <div style={{fontSize:10,color:"#7a7aa0",fontWeight:600,textAlign:"center",width:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",height:24,lineHeight:"24px"}}>{d.label}</div>
             </div>
           );
         })}
       </div>
     </div>
   );
+}
+
+// Ranked horizontal bars (Top content): each row is a thin colour bar sized against the biggest value
+function HBarChart({data,title,unit=""}){
+  if(!data||data.length===0) return <div style={{color:"#44446a",fontSize:12,padding:"20px 0"}}>No data yet</div>;
+  const max=Math.max(...data.map(d=>d.value),1);
+  return(
+    <div>
+      {title&&<div style={{fontSize:13,fontWeight:700,marginBottom:14,color:"#e2e2f0"}}>{title}</div>}
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {data.map((d,i)=>{
+          const c=PALETTE[i%PALETTE.length];
+          return(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10}} title={`${d.label}: ${fN(d.value)}${unit}`}>
+              <div style={{width:22,fontSize:11,fontWeight:800,color:"#44446a",textAlign:"right"}}>{i+1}</div>
+              <div style={{flex:"0 0 clamp(70px,22%,150px)",fontSize:12,color:"#d4d4ee",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</div>
+              <div style={{flex:1,height:14,background:"#10101d",borderRadius:7,overflow:"hidden"}}>
+                <div style={{width:`${d.value>0?Math.max(3,(d.value/max)*100):0}%`,height:"100%",background:`linear-gradient(90deg,${c},${c}99)`,borderRadius:7,transition:"width .7s ease",boxShadow:`0 0 10px ${c}55`}}/>
+              </div>
+              <div style={{width:48,textAlign:"right",fontSize:12,fontWeight:800,color:c}}>{fN(d.value)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Live audience: how many members are watching each live channel right now (realtime presence) ──
+function useWatching(ids){
+  const[counts,setCounts]=useState({});
+  const key=ids.join(",");
+  useEffect(()=>{
+    if(!ids.length){setCounts({});return;}
+    const rooms=ids.map(id=>{
+      const room=supabase.channel("live-viewers-"+id);
+      room.on("presence",{event:"sync"},()=>setCounts(c=>({...c,[id]:Object.keys(room.presenceState()).length}))).subscribe();
+      return room;
+    });
+    return()=>rooms.forEach(r=>{try{supabase.removeChannel(r);}catch(e){}});
+  },[key]);
+  return counts;
 }
 
 // ── LINE CHART (SVG) ─────────────────────────────────────
@@ -762,6 +803,7 @@ function ContentForm({initial,isLiveForm=false,onSave,onCancel,saving}){
 
 // ── CONTENT LIST ──────────────────────────────────────────
 function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
+  const watching=useWatching(isLiveList?content.filter(c=>liveState(c)==="live").map(c=>String(c.id)):[]);
   const[modal,  setModal]  =useState(null);
   const[search, setSearch] =useState("");
   const[saving, setSaving] =useState(false);
@@ -904,6 +946,7 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
                         {(()=>{const isL=c.is_live||c.type==="Live";const s=liveState(c);
                           if(!isL)return <Chip label={c.is_active?"ACTIVE":"OFF"} color={c.is_active?GR:"#3a3a5a"}/>;
                           return <Chip label={s==="live"?"LIVE":s==="ended"?"ENDED":s==="upcoming"?"UPCOMING":"OFF"} color={s==="live"?GR:s==="upcoming"?AM:s==="ended"?R:"#3a3a5a"}/>;})()}
+                        {(c.is_live||c.type==="Live")&&liveState(c)==="live"&&<Chip label={"👁 "+fN(watching[String(c.id)]||0)+" watching"} color={BL}/>}
                         {c.is_featured&&<Chip label="⭐" color={AM}/>}
                         {c.is_premium&&<Chip label="👑" color={R}/>}
                         {c.is_live&&<Chip label="🔴" color={R}/>}
@@ -951,7 +994,12 @@ function AnalyticsPage({stats,content,users}){
     const DAY_LABELS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     (async()=>{
       const since=new Date(); since.setDate(since.getDate()-6); since.setHours(0,0,0,0);
-      const{data,error}=await supabase.from("watch_history").select("watched_at").gte("watched_at",since.toISOString());
+      let data=null,error=null;
+      try{
+        const r=await fetch(`${API}/api/admin/analytics/views?days=7`,{headers:authHeader()}).then(x=>x.json());
+        if(r?.success&&r.data?.available)data=r.data.events.map(t=>({watched_at:t}));
+      }catch(e){}
+      if(!data){const q=await supabase.from("watch_history").select("watched_at").gte("watched_at",since.toISOString());data=q.data;error=q.error;}
       if(cancelled)return;
       if(error){setWeeklyViews([]);return;}
       const buckets={};
@@ -1029,7 +1077,7 @@ function AnalyticsPage({stats,content,users}){
         <div className="card" style={{padding:24}}>
           {weeklyViews===null
             ?<div style={{textAlign:"center",color:"#3a3a5a",padding:"40px 0",fontSize:12}}>Loading real activity…</div>
-            :<BarChart data={weeklyViews} height={180} color={R} title="📊 Watch Activity (Last 7 Days)"/>
+            :<BarChart data={weeklyViews} height={180} color={R} multi title="📊 Unique Views (Last 7 Days)"/>
           }
         </div>
 
@@ -1043,7 +1091,7 @@ function AnalyticsPage({stats,content,users}){
         {/* Top Content Performance */}
         <div className="card" style={{padding:24}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:18,color:"#e2e2f0"}}>🔥 Top 8 Content by Views</div>
-          <BarChart data={top.slice(0,8).map(c=>({label:c.title.slice(0,10),value:c.views||0}))} height={160} color={AM}/>
+          <HBarChart data={top.slice(0,8).map(c=>({label:c.title,value:c.views||0}))}/>
         </div>
 
         {/* Plan Distribution Donut */}
@@ -1365,6 +1413,16 @@ function EmployeesPage({showToast}){
     }catch(e){showToast("Failed: "+e.message,"err");}
   }
 
+  async function remove(emp){
+    if(!window.confirm(`Permanently delete ${emp.name}?\n\nTheir account is closed completely and they are signed out immediately. This cannot be undone.`))return;
+    try{
+      const res=await fetch(`${API}/api/employees/${emp.id}`,{method:"DELETE",headers:authHeader()});
+      const json=await res.json();
+      if(!json.success)throw new Error(json.msg);
+      showToast("Employee account deleted");load();
+    }catch(e){showToast("Failed: "+e.message,"err");}
+  }
+
   async function reactivate(id){
     try{
       const res=await fetch(`${API}/api/employees/${id}/reactivate`,{method:"POST",headers:authHeader()});
@@ -1450,6 +1508,7 @@ function EmployeesPage({showToast}){
               {emp.employee_status==="ACTIVE"
                 ?<button onClick={()=>disable(emp.id)} style={{background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Disable</button>
                 :<button onClick={()=>reactivate(emp.id)} style={{background:"rgba(0,200,83,.1)",border:"1px solid rgba(0,200,83,.3)",color:GR,borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Reactivate</button>}
+              <button onClick={()=>remove(emp)} style={{background:"rgba(229,9,20,.12)",border:"1px solid rgba(229,9,20,.4)",color:"#ff5a63",borderRadius:7,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Delete</button>
             </div>
           ))}
         </div>
@@ -1827,6 +1886,9 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
 
   const liveContent =content.filter(c=>c.is_live||c.type==="Live");
   const movieContent=content.filter(c=>!c.is_live&&c.type!=="Live");
+  const liveNowIds=liveContent.filter(c=>liveState(c)==="live").map(c=>String(c.id));
+  const watchingMap=useWatching(liveNowIds);
+  const watchingTotal=Object.values(watchingMap).reduce((s,n)=>s+n,0);
 
   return(
     <div style={{display:"flex",height:"100vh",background:"#04040e",overflow:"hidden",fontFamily:"'Inter',sans-serif"}}>
@@ -1908,7 +1970,8 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
                   ["👁️","Total Views",   fN(stats.totalViews),       "#a855f7"],
                   ["🎬","Content",        stats.totalContent||0,      AM],
                   ["📢","Active Ads",     stats.activeAds||0,         "#06b6d4"],
-                  ["🔴","Live Now",       liveContent.filter(c=>c.is_active).length, R],
+                  ["🔴","Live Now",       liveNowIds.length, R],
+                  ["👁️","Watching Live",  fN(watchingTotal), BL],
                   ["🆓","Free Users",     fN((users||[]).filter(u=>!u.plan||u.plan==="free").length), "#3a3a5a"],
                 ]:dept==="FINANCE"?[
                   ["💰","Total Revenue",  "₹"+fN(stats.totalRevenue), GR],
@@ -1922,7 +1985,8 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
                   ["📺","Web Series",     (content||[]).filter(c=>c.type==="Web Series").length, BL],
                 ]:dept==="LIVE"?[
                   ["🔴","Live Channels",  liveContent.length,         R],
-                  ["📡","Live Now",       liveContent.filter(c=>c.is_active).length, GR],
+                  ["📡","Live Now",       liveNowIds.length, GR],
+                  ["👁️","Watching Live",  fN(watchingTotal), BL],
                   ["👁️","Total Views",   fN(stats.totalViews),       "#a855f7"],
                 ]:dept==="SUPPORT"?[
                   ["👥","Total Users",    fN(stats.totalUsers),       BL],
@@ -1948,9 +2012,9 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
               {(dept==="ALL"||dept==="CONTENT"||dept==="LIVE"||dept==="ANALYTICS")&&(
                 <div style={{display:"grid",gridTemplateColumns: dept==="ALL"?"1fr 1fr":"1fr",gap:18,marginBottom:18}}>
                   <div className="card" style={{padding:24}}>
-                    <BarChart
-                      data={[...content].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,7).map(c=>({label:c.title.slice(0,8),value:c.views||0}))}
-                      height={160} color={R} title="🔥 Top Content Views"
+                    <HBarChart
+                      data={[...content].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,7).map(c=>({label:c.title,value:c.views||0}))}
+                      title="🔥 Top Content Views (unique viewers)"
                     />
                   </div>
                   {dept==="ALL"&&(

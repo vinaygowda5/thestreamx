@@ -16,7 +16,8 @@ async function listEmployees(req, res) {
 
   let query = sb.from("users")
     .select("id,name,email,phone,employee_id,employee_status,last_login_at,last_logout_at,managed_by,created_at,role:employee_role_id(name,department,tier)")
-    .not("employee_role_id", "is", null);
+    .not("employee_role_id", "is", null)
+    .neq("employee_status", "DELETED");
 
   if (ctx.tier === "SUPER") {
     // no filter
@@ -136,6 +137,32 @@ async function disableEmployee(req, res) {
   return ok(res, null, "Employee disabled — all sessions revoked");
 }
 
+// Permanently closes an employee account (Super Admin only). The account, its login and every
+// session stop working at once. If other records reference the user and the row cannot be removed,
+// it is scrubbed (name, email, phone, password, role) and marked DELETED so it can never be used again.
+async function deleteEmployee(req, res) {
+  const { id } = req.params;
+  if (String(id) === String(req.user.id)) return err(res, "You cannot delete your own account", 400);
+  const { data: target } = await sb.from("users").select("id,name,employee_id,employee_role_id,role:employee_role_id(name)").eq("id", id).maybeSingle();
+  if (!target || !target.employee_role_id) return err(res, "Employee not found", 404);
+  if (target.role?.name === "SUPER_ADMIN") return err(res, "A Super Admin account cannot be deleted", 403);
+
+  await sb.from("sessions").update({ revoked: true }).eq("user_id", id);
+  let removed = true;
+  const del = await sb.from("users").delete().eq("id", id);
+  if (del.error) {
+    removed = false;
+    const scrub = await sb.from("users").update({
+      employee_status: "DELETED", employee_role_id: null, employee_id: null, employee_password_hash: null,
+      email: `deleted+${id}@deleted.invalid`, phone: null, name: "Deleted employee", is_active: false,
+    }).eq("id", id);
+    if (scrub.error) return err(res, "Could not delete: " + scrub.error.message, 500);
+  }
+  try { require("../middleware/auth").forgetEmployee(id); } catch (x) {}
+  await logAudit({ req, action: "DELETED_EMPLOYEE", resourceType: "employee", resourceId: id, after: { name: target.name, removed } });
+  return ok(res, null, "Employee account permanently closed");
+}
+
 async function reactivateEmployee(req, res) {
   const ctx = await loadEmployeeContext(req.user.id);
   if (!ctx?.roleName) return err(res, "Forbidden", 403);
@@ -176,4 +203,4 @@ async function loginActivity(req, res) {
   return ok(res, data);
 }
 
-module.exports = { whoAmI, listEmployees, createEmployee, resetPassword, updateEmployeeRole, disableEmployee, reactivateEmployee, loginActivity };
+module.exports = { deleteEmployee,  whoAmI, listEmployees, createEmployee, resetPassword, updateEmployeeRole, disableEmployee, reactivateEmployee, loginActivity };

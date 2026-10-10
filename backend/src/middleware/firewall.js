@@ -66,7 +66,7 @@ const loginLimiter = createRateLimiter({
 const ATTACK_PATTERNS = [
   // SQL injection
   /(\bUNION\b.*\bSELECT\b|\bSELECT\b.*\bFROM\b|\bDROP\b.*\bTABLE\b|\bINSERT\b.*\bINTO\b|\bDELETE\b.*\bFROM\b)/gi,
-  /('|(--|;).*--|\bOR\b\s+\d+\s*=\s*\d+|\bAND\b\s+\d+\s*=\s*\d+)/gi,
+  /('\s*(or|and)\b|'\s*;|'\s*--|;\s*--|\bOR\b\s+\d+\s*=\s*\d+|\bAND\b\s+\d+\s*=\s*\d+)/gi,   // (a lone apostrophe, like in "I'm", is normal text)
   // XSS
   /<script[\s\S]*?>[\s\S]*?<\/script>/gi,
   /javascript\s*:/gi,
@@ -81,7 +81,7 @@ const ATTACK_PATTERNS = [
 
 function containsAttackPattern(value) {
   if (typeof value !== "string") return false;
-  const decoded = decodeURIComponent(value).toLowerCase();
+  let decoded; try { decoded = decodeURIComponent(value).toLowerCase(); } catch (e) { decoded = String(value).toLowerCase(); }
   return ATTACK_PATTERNS.some(pattern => {
     pattern.lastIndex = 0;
     return pattern.test(decoded);
@@ -115,8 +115,8 @@ function requestValidator(req, res, next) {
     return res.status(400).json({ success: false, msg: "Invalid request." });
   }
 
-  // 3. Request body
-  if (req.body && typeof req.body === "object") {
+  // 3. Request body (the support chat is free text, so it is length-limited in its controller instead)
+  if (req.body && typeof req.body === "object" && !req.path.startsWith("/api/support/chat")) {
     if (deepScanObject(req.body)) {
       log("warn", "Attack pattern in body", { ip, path: req.path });
       addSuspiciousStrike(ip, "attack_in_body");

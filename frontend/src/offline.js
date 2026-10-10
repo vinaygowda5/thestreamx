@@ -19,12 +19,32 @@ export function offlineSupported() {
   return typeof caches !== "undefined";
 }
 
+// Streams the file into the app's private cache and reports progress.
+// onProgress(percent | null, loadedBytes, totalBytes) — percent is null when the server hides the file size.
 export async function cacheVideoForOffline(url, onProgress) {
   if (!offlineSupported()) throw new Error("Offline downloads aren't supported in this browser");
   const response = await fetch(url);
   if (!response.ok) throw new Error("Could not fetch the video file");
+  const total = parseInt(response.headers.get("content-length") || "0", 10) || 0;
   const cache = await caches.open(OFFLINE_CACHE);
-  await cache.put(url, response.clone());
+
+  if (!response.body || !response.body.tee) {            // very old browsers: no progress, still downloads
+    await cache.put(url, response);
+    onProgress && onProgress(100, total, total);
+    return true;
+  }
+  const [forCache, forCount] = response.body.tee();       // one copy is saved, the other is counted for the % display
+  const saving = cache.put(url, new Response(forCache, { status: 200, headers: response.headers }));
+  const reader = forCount.getReader();
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    loaded += value.length;
+    onProgress && onProgress(total ? Math.min(99, Math.round((loaded / total) * 100)) : null, loaded, total);
+  }
+  await saving;
+  onProgress && onProgress(100, loaded, total || loaded);
   return true;
 }
 

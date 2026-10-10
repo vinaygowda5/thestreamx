@@ -24,6 +24,10 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
   const[downloadStatus,setDownloadStatus]=useState({}); // contentId -> "checking"|"ready"|"missing"
   const[playItem,setPlayItem]=useState(null); // content object currently open in the player
   const[installable,setInstallable]=useState(canInstall());
+  const SUPPORT_EMAIL=import.meta.env.VITE_SUPPORT_EMAIL||"support@streamx.in";   // set VITE_SUPPORT_EMAIL in Vercel to your real address
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  const isStandalone=!!navigator.standalone||window.matchMedia?.("(display-mode: standalone)").matches;
+  const[showIosInstall,setShowIosInstall]=useState(false);
   useEffect(()=>{
     const t=setInterval(()=>setInstallable(canInstall()),1000);
     return ()=>clearInterval(t);
@@ -523,6 +527,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
               <div style={{fontSize:11,color:MT,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>{t("support_help",appLang)}</div>
               {/* ← AI CUSTOMER SUPPORT BUTTON */}
               <Row icon="🤖" label={t("ai_support",appLang)} sub={t("ai_support_sub",appLang)} onClick={()=>setShowSupport(true)}/>
+              {!installable&&isIOS&&!isStandalone&&<Row icon="📲" label={t("install_app",appLang)} sub={t("install_app_sub",appLang)} onClick={()=>setShowIosInstall(true)}/>}
               {installable&&<Row icon="📲" label={t("install_app",appLang)} sub={t("install_app_sub",appLang)} onClick={async()=>{const ok=await promptInstall();if(ok)setInstallable(false);}}/>}
               {"Notification" in window && Notification.permission!=="granted" && (
                 <Row icon="🔔" label={t("enable_notifications",appLang)} sub={t("enable_notifications_sub",appLang)} onClick={async()=>{
@@ -533,10 +538,22 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
                   showToast(ok?"Notifications enabled":"Could not enable notifications right now");
                 }}/>
               )}
-              <Row icon="📧" label={t("email_support",appLang)} sub="support@streamx.in" onClick={()=>window.open("mailto:support@streamx.in")}/>
-              <Row icon="📋" label={t("terms",appLang)} onClick={()=>showToast("Coming soon")}/>
-              <Row icon="🔒" label={t("privacy",appLang)} onClick={()=>showToast("Coming soon")} last/>
+              <Row icon="📧" label={t("email_support",appLang)} sub={<span translate="no" className="nolink">{SUPPORT_EMAIL}</span>} onClick={()=>window.open("mailto:"+SUPPORT_EMAIL)} last/>
             </Card>
+
+            {showIosInstall&&(
+              <div onClick={()=>setShowIosInstall(false)} style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+                <div onClick={e=>e.stopPropagation()} style={{background:"#14141c",borderRadius:"18px 18px 0 0",padding:"22px 22px calc(28px + env(safe-area-inset-bottom,0px))",width:"100%",maxWidth:480,color:"#fff"}}>
+                  <div style={{fontWeight:800,fontSize:17,marginBottom:6}}>Install StreamX on iPhone</div>
+                  <div style={{color:"#aaa",fontSize:13,lineHeight:1.7,marginBottom:14}}>
+                    1. Tap the <b style={{color:"#fff"}}>Share</b> button (the square with an arrow) in your browser<br/>
+                    2. Scroll and tap <b style={{color:"#fff"}}>Add to Home Screen</b><br/>
+                    3. Tap <b style={{color:"#fff"}}>Add</b>. StreamX opens like a normal app
+                  </div>
+                  <button onClick={()=>setShowIosInstall(false)} style={{width:"100%",background:"#e50914",color:"#fff",border:"none",borderRadius:10,padding:"12px",fontWeight:700,cursor:"pointer"}}>Got it</button>
+                </div>
+              </div>
+            )}
 
             {/* Account */}
             <Card>

@@ -31,3 +31,6 @@ html.sx-locked { overflow: hidden; }
 html { -webkit-text-size-adjust: 100%; }
 body { min-height: 100vh; min-height: 100dvh; width: 100%; max-width: 100%; }
 img, video, canvas, svg, iframe { max-width: 100%; }
+
+/* iPhone auto-underlines anything that looks like an email / phone number: switch that off */
+a[x-apple-data-detectors], .nolink, a[href^="mailto:"] { color: inherit !important; text-decoration: none !important; font: inherit !important; -webkit-text-decoration: none !important; }

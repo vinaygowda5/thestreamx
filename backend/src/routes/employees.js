@@ -10,6 +10,7 @@ router.post("/:id/reset-password",requireAuth, c.resetPassword);
 router.put("/:id/role",           requireAuth, requireSuperAdmin(), c.updateEmployeeRole);
 router.post("/:id/disable",       requireAuth, c.disableEmployee);
 router.post("/:id/reactivate",    requireAuth, c.reactivateEmployee);
+router.delete("/:id",              requireAuth, requireSuperAdmin(), c.deleteEmployee);
 router.get("/login-activity",     requireAuth, c.loginActivity);
 
 module.exports = router;
