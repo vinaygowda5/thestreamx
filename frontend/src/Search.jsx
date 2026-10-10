@@ -1,3 +1,4 @@
+import { hasPaidPlan } from "./plan.js";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 
@@ -98,7 +99,7 @@ export default function Search({ onNavigate, user, onClose }) {
 
   // Content card
   function Card({ item, big }) {
-    const isPremium = item.is_premium && !["plan_premium","premium","plan_annual"].includes(user?.plan);
+    const isPremium = item.is_premium && !hasPaidPlan(user);
     return (
       <div
         onClick={() => playContent(item)}
@@ -153,7 +154,7 @@ export default function Search({ onNavigate, user, onClose }) {
 
   // Result row (list view)
   function ResultRow({ item }) {
-    const isPremium = item.is_premium && !["plan_premium","premium","plan_annual"].includes(user?.plan);
+    const isPremium = item.is_premium && !hasPaidPlan(user);
     return (
       <div
         onClick={() => playContent(item)}

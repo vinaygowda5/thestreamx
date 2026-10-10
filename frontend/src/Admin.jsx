@@ -841,6 +841,7 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
       const same=(content||[]).find(c=>c.id!==modal?.id&&!c.deleted_at&&((c.stream_url||"").trim().toLowerCase()===link.toLowerCase()));
       if(same){showToast(`This link is already used by "${same.title}". Edit that one, or add other languages inside it.`,"err");return;}
     }
+    if(!form.is_active&&!modal?.id&&!window.confirm("“Active — visible to users” is NOT ticked, so nobody will see this yet.\n\nTick it first, or press OK to save it hidden."))return;
     setSaving(true);
     try{
       if(modal?.id){
@@ -857,7 +858,7 @@ function ContentList({content,isLiveList=false,onRefresh,onLocalAdd,showToast}){
         let visible=false;
         try{const{data:pub}=await supabase.from("content").select("id").eq("id",row.id).eq("is_active",true).maybeSingle();visible=!!pub;}catch(e){}
         if(visible)showToast((isLiveList?"✓ Channel added: ":"✓ Added: ")+form.title+". Visible on Home now");
-        else showToast(`"${form.title}" saved, but viewers can't see it yet (Status: ${row.is_active?"ON":"OFF"}). Press "Show" on it. If it keeps turning OFF, run CHECK_CONTENT_STATUS.sql in Supabase.`,"warn");
+        else showToast(`"${form.title}" saved, but it is hidden from viewers (Status: ${row.is_active?"ON":"OFF"}). ${form.is_active?"Press Show on it. If it keeps turning OFF, run CHECK_CONTENT_STATUS.sql in Supabase.":"You left Active unticked: press Show to publish it. “Premium” only controls who can watch it."}`,"warn");
         if(onLocalAdd)onLocalAdd(row);
       }
       setModal(null);onRefresh(true);

@@ -4,6 +4,7 @@ import { supabase, db } from "./supabase.js";
 import { cacheVideoForOffline, isCachedOffline } from "./offline.js";
 import { ImaAdController, IS_TEST_AD_TAG } from "./adsManager.js";
 import { useBodyScrollLock } from "./scrollLock.js";
+import { hasPaidPlan } from "./plan.js";
 import { AD_FIRST_BREAK_SEC, AD_VOD_EVERY_SEC, AD_LIVE_EVERY_SEC, AD_END_GUARD_SEC, AD_PER_BREAK } from "./adConfig.js";
 
 // Poster tile with a clean fallback — if the image is missing or fails to
@@ -165,7 +166,10 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   const notStarted = startsMs > nowTick;
   const scheduleOver = endsMs > 0 && endsMs <= nowTick;
   const blocked = notStarted || scheduleOver;
-  const wasBlockedRef = useRef(blocked);
+  // "Premium subscribers only" title opened by someone without a paid plan -> subscription screen first
+  const contentLocked = !!content?.is_premium && !hasPaidPlan(user);
+  const halted = blocked || contentLocked;
+  const wasBlockedRef = useRef(halted);
   // ── Live ended detection ──
   const [liveEnded, setLiveEnded] = useState(false);
   const lastAdvanceRef = useRef(Date.now());
@@ -226,11 +230,12 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   }, [isLive, liveEnded]);
   // Start time reached -> start playing; expiry reached -> stop
   useEffect(() => {
-    if (blocked) {
+    if (halted) {
       try { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } videoRef.current?.pause(); } catch (e) {}
-    } else if (wasBlockedRef.current) { setError(null); startInit(); }
-    wasBlockedRef.current = blocked;
-  }, [blocked]);
+    } else if (wasBlockedRef.current) { setError(null); startInit(); }   // e.g. the viewer just subscribed
+    wasBlockedRef.current = halted;
+  }, [halted]);
+  useEffect(() => { if (contentLocked) onUpgrade?.(); }, [contentLocked]);   // go straight to the plans screen
 
   function pickQuality(opt) {            // opt = null -> Auto
     if (opt && opt.premium && !isPremium) {
@@ -437,7 +442,7 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
   async function startInit() {
     // No ad before the video — playback starts immediately. Ads come later,
     // as in-stream breaks (see triggerAdBreak / the timeupdate handler).
-    if (blocked) return;                    // not started yet / already expired
+    if (halted) return;                     // not started yet / expired / premium-only and not subscribed
     startVideo();
     const isEmbed = streamUrl.includes("youtube.com/embed") || streamUrl.includes("iframe");
     if (!isPremium && !isEmbed) {
@@ -816,7 +821,18 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
         )}
 
         {/* Error */}
-        {(blocked || liveEnded) && (
+        {contentLocked && (
+          <div style={{ position:"absolute", inset:0, zIndex:56, background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10, padding:24, textAlign:"center", color:"#fff" }}>
+            <div style={{ fontSize:42 }}>👑</div>
+            <div style={{ fontSize:18, fontWeight:800 }}>Premium content</div>
+            <div style={{ fontSize:13, color:"#aaa", maxWidth:320 }}>Subscribe to a StreamX plan to watch “{content?.title}”.</div>
+            <div style={{ display:"flex", gap:10, marginTop:6 }}>
+              <button onClick={() => onUpgrade?.()} style={{ background:"#e50914", color:"#fff", border:"none", borderRadius:8, padding:"11px 22px", fontWeight:800, cursor:"pointer" }}>👑 View plans</button>
+              <button onClick={onClose} style={{ background:"#222", color:"#fff", border:"none", borderRadius:8, padding:"11px 20px", cursor:"pointer" }}>Close</button>
+            </div>
+          </div>
+        )}
+        {!contentLocked && (blocked || liveEnded) && (
           <div style={{ position:"absolute", inset:0, zIndex:55, background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10, padding:24, textAlign:"center", color:"#fff" }}>
             <div style={{ fontSize:42 }}>{notStarted ? "⏰" : "📴"}</div>
             <div style={{ fontSize:18, fontWeight:800 }}>{notStarted ? "Live starts soon" : "This live has ended"}</div>

@@ -4,7 +4,7 @@ import VideoPlayer from "./VideoPlayer.jsx";
 
 const RED = "#e50914";
 
-function UniversalPlayer({ content, user, onClose }) {
+function UniversalPlayer({ content, user, onClose, onUpgrade}) {
   if (!content) return null;
   const url = content.embed_url || content.stream_url || "";
   const isYT = url.includes("youtube.com") || url.includes("youtu.be");
@@ -44,7 +44,7 @@ function UniversalPlayer({ content, user, onClose }) {
       </div>
     );
   }
-  return <VideoPlayer content={content} user={user} onClose={onClose} onNext={()=>{}}/>;
+  return <VideoPlayer content={content} user={user} onClose={onClose} onNext={()=>{}} onUpgrade={onUpgrade}/>;
 }
 
 const GENRE_COLOR = {
@@ -143,7 +143,7 @@ export default function WatchPage({ content, user, onBack, onUpgrade }) {
 
       {/* Player Modal */}
       {playing && (
-        <UniversalPlayer content={content} user={user} onClose={()=>setPlaying(false)}/>
+        <UniversalPlayer content={content} user={user} onClose={()=>setPlaying(false)} onUpgrade={onUpgrade}/>
       )}
 
       {/* Toast */}
@@ -299,7 +299,7 @@ export default function WatchPage({ content, user, onBack, onUpgrade }) {
               <div style={{fontSize:12,color:"#888"}}>Subscribe to StreamX Premium to watch this content in 4K HDR</div>
             </div>
             <button onClick={onUpgrade} style={{background:RED,color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Inter',sans-serif"}}>
-              Upgrade ₹249
+              Upgrade ₹499
             </button>
           </div>
         )}

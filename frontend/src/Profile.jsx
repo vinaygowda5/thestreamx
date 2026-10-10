@@ -592,7 +592,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
           user={user}
           onClose={()=>{setPlayItem(null);loadData();}}
           onNext={null}
-        />
+         onUpgrade={onUpgrade} />
       )}
     </div>
   );
