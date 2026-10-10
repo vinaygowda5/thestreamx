@@ -672,12 +672,12 @@ export default function VideoPlayer({ content, user, onClose, onNext, onUpgrade 
     }
     const el = containerRef.current;
     const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
-    const useFake = () => { setFakeFs(true); setFS(true); };   // iPhone: no fullscreen API -> rotate the player ourselves
-    if (!req) { useFake(); return; }
+    const fallbackFs = () => { setFakeFs(true); setFS(true); };   // iPhone: no fullscreen API -> rotate the player ourselves
+    if (!req) { fallbackFs(); return; }
     try {
       const r = req.call(el);
-      Promise.resolve(r).then(() => { setFS(true); if (isMobile && screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {}); }).catch(useFake);
-    } catch (e) { useFake(); }
+      Promise.resolve(r).then(() => { setFS(true); if (isMobile && screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {}); }).catch(fallbackFs);
+    } catch (e) { fallbackFs(); }
   }
 
   async function togglePiP() {

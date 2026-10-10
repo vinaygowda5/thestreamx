@@ -143,7 +143,7 @@ function AppInner() {
       {legalPage && <LegalPage slug={legalPage} onClose={() => setLegalPage(null)} />}
 
       {/* AI Customer Support overlay (footer "Contact Support") */}
-      {showSupport && <CustomerSupport user={user} onClose={() => setShowSupport(false)} />}
+      {showSupport && <CustomerSupport user={user} onClose={() => setShowSupport(false)} onUpgrade={() => { setShowSupport(false); setUpgrade(true); }} />}
 
       {/* Pages */}
       {page === "home"    && <Home    onNavigate={handleNavigate} user={user} onUpgrade={() => setUpgrade(true)} onOpenLegal={setLegalPage} onSupport={() => setShowSupport(true)} />}

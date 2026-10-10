@@ -28,6 +28,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
   const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
   const isStandalone=!!navigator.standalone||window.matchMedia?.("(display-mode: standalone)").matches;
   const[showIosInstall,setShowIosInstall]=useState(false);
+  const isPremiumUser=["plan_premium","plan_annual","premium"].includes(user?.plan);
   useEffect(()=>{
     const t=setInterval(()=>setInstallable(canInstall()),1000);
     return ()=>clearInterval(t);
@@ -247,7 +248,7 @@ export default function Profile({onNavigate,user,onLogout,onUpgrade}){
       `}</style>
 
       {/* AI Customer Support — opens as full screen overlay */}
-      {showSupport&&<CustomerSupport user={user} onClose={()=>setShowSupport(false)}/>}
+      {showSupport&&<CustomerSupport user={user} onClose={()=>setShowSupport(false)} onUpgrade={()=>{setShowSupport(false);onUpgrade?.();}}/>}
 
       {/* Toast */}
       {toast&&(

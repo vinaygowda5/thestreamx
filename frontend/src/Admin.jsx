@@ -1873,6 +1873,11 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
     setLoading(false);
   }
 
+  // Hooks must run on EVERY render, so this lives above the early returns below (the admin crashed otherwise)
+  const liveNowIds=content.filter(c=>(c.is_live||c.type==="Live")&&liveState(c)==="live").map(c=>String(c.id));
+  const watchingMap=useWatching(liveNowIds);
+  const watchingTotal=Object.values(watchingMap).reduce((s,n)=>s+n,0);
+
   if(showFace&&!verified) return <FaceAuth user={user} onSuccess={()=>{setVerified(true);setShowFace(false);}} onSkip={()=>{setVerified(true);setShowFace(false);}}/>;
 
   if(loading) return(
@@ -1886,9 +1891,6 @@ export default function Admin({onNavigate,user,employeeRole,onLogout}){
 
   const liveContent =content.filter(c=>c.is_live||c.type==="Live");
   const movieContent=content.filter(c=>!c.is_live&&c.type!=="Live");
-  const liveNowIds=liveContent.filter(c=>liveState(c)==="live").map(c=>String(c.id));
-  const watchingMap=useWatching(liveNowIds);
-  const watchingTotal=Object.values(watchingMap).reduce((s,n)=>s+n,0);
 
   return(
     <div style={{display:"flex",height:"100vh",background:"#04040e",overflow:"hidden",fontFamily:"'Inter',sans-serif"}}>
